@@ -1,0 +1,29 @@
+[
+  {
+    "Id": "duplicate",
+    "Lng": 116.3,
+    "Lat": 39.9,
+    "CameraType": "类型",
+    "Address": "有效记录"
+  },
+  {
+    "Id": "duplicate",
+    "Lng": 116.4,
+    "Lat": 39.9,
+    "CameraType": "类型",
+    "Address": "重复 ID"
+  },
+  {
+    "Id": "bad-coordinate",
+    "Lng": 200,
+    "Lat": 39.9,
+    "CameraType": "类型",
+    "Address": "坏坐标"
+  },
+  {
+    "Id": "missing-type",
+    "Lng": 116.5,
+    "Lat": 39.9,
+    "Address": "缺少类型"
+  }
+]

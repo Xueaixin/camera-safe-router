@@ -1,0 +1,18 @@
+[
+  {
+    "Id": "camera-a",
+    "District": "海淀区",
+    "Lng": 116.329009,
+    "Lat": 39.898479,
+    "CameraType": "拍进京证",
+    "Address": "测试路口 [北向南]"
+  },
+  {
+    "Id": "camera-b",
+    "District": "海淀区",
+    "Lng": 116.329009,
+    "Lat": 39.898479,
+    "CameraType": "拍进京证",
+    "Address": "同坐标另一设备 [南向北]"
+  }
+]

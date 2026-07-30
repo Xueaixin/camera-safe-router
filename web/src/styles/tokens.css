@@ -1,0 +1,24 @@
+:root {
+  color-scheme: light;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f4f6f8;
+  --color-canvas: #e9eef1;
+  --color-border: #d9dee5;
+  --color-border-strong: #b8c0ca;
+  --color-text: #18212f;
+  --color-text-muted: #667085;
+  --color-route: #1769e0;
+  --color-route-hover: #0e55bd;
+  --color-location: #087f6b;
+  --color-camera: #dc3f35;
+  --color-warning: #a15c00;
+  --color-error: #b42318;
+  --color-error-surface: #fff1f0;
+  --shadow-panel: 0 8px 24px rgba(24, 33, 47, 0.14);
+  --radius-control: 6px;
+  --control-height: 44px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}

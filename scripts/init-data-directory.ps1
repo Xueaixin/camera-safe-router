@@ -1,0 +1,40 @@
+[CmdletBinding()]
+param(
+    [string]$DataRoot
+)
+
+$ErrorActionPreference = 'Stop'
+
+if ([string]::IsNullOrWhiteSpace($DataRoot)) {
+    $codeRoot = Split-Path -Parent $PSScriptRoot
+    $resolvedCodeRoot = (Resolve-Path -LiteralPath $codeRoot).Path
+    $driveRoot = [System.IO.Path]::GetPathRoot($resolvedCodeRoot)
+    if ([string]::IsNullOrWhiteSpace($driveRoot)) {
+        throw "Cannot determine the drive root for $resolvedCodeRoot"
+    }
+    $DataRoot = Join-Path $driveRoot 'camera-safe-routing-data'
+}
+
+$resolvedDataRoot = [System.IO.Path]::GetFullPath($DataRoot)
+$directories = @(
+    $resolvedDataRoot,
+    (Join-Path $resolvedDataRoot 'osm'),
+    (Join-Path $resolvedDataRoot 'cameras'),
+    (Join-Path $resolvedDataRoot 'graph-cache\beijing'),
+    (Join-Path $resolvedDataRoot 'snapshots'),
+    (Join-Path $resolvedDataRoot 'downloads'),
+    (Join-Path $resolvedDataRoot 'work'),
+    (Join-Path $resolvedDataRoot 'backups')
+)
+
+foreach ($directory in $directories) {
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+}
+
+[PSCustomObject]@{
+    DataRoot = $resolvedDataRoot
+    BeijingPbf = Join-Path $resolvedDataRoot 'osm\beijing-latest.osm.pbf'
+    CameraJson = Join-Path $resolvedDataRoot 'cameras\map.json'
+    GraphCache = Join-Path $resolvedDataRoot 'graph-cache\beijing'
+    Snapshots = Join-Path $resolvedDataRoot 'snapshots'
+} | Format-List

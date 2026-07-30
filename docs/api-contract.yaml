@@ -1,0 +1,418 @@
+openapi: 3.0.3
+info:
+  title: Camera Safe Routing API
+  version: 1.0.0
+  description: 北京摄像头点位避让路线规划首期接口契约
+servers:
+  - url: http://localhost:8080
+    description: Local development
+tags:
+  - name: Routes
+  - name: Cameras
+  - name: Operations
+paths:
+  /api/v1/routes:
+    post:
+      tags: [Routes]
+      operationId: planRoute
+      summary: 规划一条避开当前摄像头快照的驾车路线
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RouteRequest'
+      responses:
+        '200':
+          description: 已通过独立安全校验的路线
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: 端点冲突或没有合规路线
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '422':
+          description: 起点或终点不在当前路网支持范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/cameras:
+    get:
+      tags: [Cameras]
+      operationId: listCameras
+      summary: 查询当前地图范围内的摄像头点位
+      parameters:
+        - name: minLng
+          in: query
+          required: true
+          schema: { type: number, format: double }
+        - name: minLat
+          in: query
+          required: true
+          schema: { type: number, format: double }
+        - name: maxLng
+          in: query
+          required: true
+          schema: { type: number, format: double }
+        - name: maxLat
+          in: query
+          required: true
+          schema: { type: number, format: double }
+        - name: coordinateSystem
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/CoordinateSystem'
+      responses:
+        '200':
+          description: 当前快照中位于查询范围内的点位
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CameraPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/camera-snapshots/current:
+    get:
+      tags: [Cameras]
+      operationId: getCurrentCameraSnapshot
+      summary: 获取当前有效摄像头和禁行边版本
+      responses:
+        '200':
+          description: 当前有效版本
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CameraSnapshotStatus'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/admin/camera-snapshots/refresh:
+    post:
+      tags: [Operations]
+      operationId: refreshCameraSnapshot
+      summary: 从配置的本地 JSON 显式重建摄像头和禁行边快照
+      description: 首期只能绑定本地管理入口或启用认证，不允许无保护暴露到公网。
+      responses:
+        '202':
+          description: 已接受刷新任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshAccepted'
+        '409':
+          description: 已有刷新任务执行中
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/health:
+    get:
+      tags: [Operations]
+      operationId: health
+      summary: 进程存活检查
+      responses:
+        '200':
+          description: 进程存活
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/readiness:
+    get:
+      tags: [Operations]
+      operationId: readiness
+      summary: 路网、摄像头快照和禁行边就绪检查
+      responses:
+        '200':
+          description: 服务可接受路线请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: 服务尚未就绪
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+components:
+  responses:
+    BadRequest:
+      description: 请求格式、坐标或参数非法
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    ServiceUnavailable:
+      description: 路网或摄像头快照不可用
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  schemas:
+    CoordinateSystem:
+      type: string
+      enum: [WGS84, GCJ02]
+    CoordinateSource:
+      type: string
+      enum: [AMAP_SEARCH, MAP_PICK, CURRENT_LOCATION]
+    VehicleType:
+      type: string
+      enum: [CAR]
+    InputCoordinate:
+      type: object
+      additionalProperties: false
+      required: [lng, lat, coordinateSystem, source]
+      properties:
+        lng:
+          type: number
+          format: double
+          minimum: -180
+          maximum: 180
+        lat:
+          type: number
+          format: double
+          minimum: -90
+          maximum: 90
+        coordinateSystem:
+          $ref: '#/components/schemas/CoordinateSystem'
+        source:
+          $ref: '#/components/schemas/CoordinateSource'
+        accuracyMeters:
+          type: number
+          format: double
+          minimum: 0
+        timestamp:
+          type: string
+          format: date-time
+    OutputCoordinate:
+      type: object
+      additionalProperties: false
+      required: [lng, lat]
+      properties:
+        lng:
+          type: number
+          format: double
+        lat:
+          type: number
+          format: double
+    RouteRequest:
+      type: object
+      additionalProperties: false
+      required: [start, end, vehicle]
+      properties:
+        start:
+          $ref: '#/components/schemas/InputCoordinate'
+        end:
+          $ref: '#/components/schemas/InputCoordinate'
+        vehicle:
+          $ref: '#/components/schemas/VehicleType'
+    RouteResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - routeId
+        - coordinateSystem
+        - distanceMeters
+        - durationSeconds
+        - cameraConflictCount
+        - cameraSnapshotVersion
+        - blockedEdgeVersion
+        - geometry
+        - steps
+      properties:
+        routeId:
+          type: string
+        coordinateSystem:
+          $ref: '#/components/schemas/CoordinateSystem'
+        distanceMeters:
+          type: number
+          format: double
+          minimum: 0
+        durationSeconds:
+          type: integer
+          format: int64
+          minimum: 0
+        cameraConflictCount:
+          type: integer
+          minimum: 0
+          maximum: 0
+        cameraSnapshotVersion:
+          type: string
+        blockedEdgeVersion:
+          type: string
+        geometry:
+          type: array
+          minItems: 2
+          items:
+            $ref: '#/components/schemas/OutputCoordinate'
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteStep'
+    RouteStep:
+      type: object
+      additionalProperties: false
+      required: [instruction, distanceMeters, durationSeconds, startIndex, endIndex]
+      properties:
+        instruction:
+          type: string
+        roadName:
+          type: string
+          nullable: true
+        distanceMeters:
+          type: number
+          format: double
+          minimum: 0
+        durationSeconds:
+          type: integer
+          format: int64
+          minimum: 0
+        startIndex:
+          type: integer
+          minimum: 0
+        endIndex:
+          type: integer
+          minimum: 0
+    CameraPage:
+      type: object
+      additionalProperties: false
+      required: [coordinateSystem, snapshotVersion, items]
+      properties:
+        coordinateSystem:
+          $ref: '#/components/schemas/CoordinateSystem'
+        snapshotVersion:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CameraView'
+    CameraView:
+      type: object
+      additionalProperties: false
+      required: [id, lng, lat, address, cameraType]
+      properties:
+        id:
+          type: string
+        lng:
+          type: number
+          format: double
+        lat:
+          type: number
+          format: double
+        address:
+          type: string
+        cameraType:
+          type: string
+        directionText:
+          type: string
+          nullable: true
+    CameraSnapshotStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - snapshotVersion
+        - blockedEdgeVersion
+        - cameraCount
+        - safetyRadiusMeters
+        - loadedAt
+      properties:
+        status:
+          type: string
+          enum: [READY]
+        snapshotVersion:
+          type: string
+        blockedEdgeVersion:
+          type: string
+        cameraCount:
+          type: integer
+          minimum: 0
+        safetyRadiusMeters:
+          type: number
+          format: double
+          minimum: 0
+        loadedAt:
+          type: string
+          format: date-time
+    RefreshAccepted:
+      type: object
+      additionalProperties: false
+      required: [jobId, status]
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [ACCEPTED]
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [UP]
+    ReadinessResponse:
+      type: object
+      additionalProperties: false
+      required: [status, graphLoaded, cameraSnapshotLoaded, blockedEdgesLoaded]
+      properties:
+        status:
+          type: string
+          enum: [READY, NOT_READY]
+        graphLoaded:
+          type: boolean
+        cameraSnapshotLoaded:
+          type: boolean
+        blockedEdgesLoaded:
+          type: boolean
+        reason:
+          type: string
+          nullable: true
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [code, message, requestId, timestamp]
+      properties:
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        message:
+          type: string
+        requestId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        details:
+          type: object
+          additionalProperties: true
+    ErrorCode:
+      type: string
+      enum:
+        - INVALID_REQUEST
+        - INVALID_COORDINATE
+        - UNSUPPORTED_COORDINATE_SYSTEM
+        - OUTSIDE_ROUTING_BOUNDS
+        - START_IN_RESTRICTED_AREA
+        - END_IN_RESTRICTED_AREA
+        - NO_COMPLIANT_ROUTE
+        - ROUTE_CONFLICT_DETECTED
+        - ROUTING_NOT_READY
+        - CAMERA_SNAPSHOT_NOT_READY
+        - REFRESH_ALREADY_RUNNING
+        - INTERNAL_ERROR
+

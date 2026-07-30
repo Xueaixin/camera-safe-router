@@ -1,0 +1,33 @@
+# IDE metadata
+.idea/
+*.iml
+
+# Backend build and diagnostics
+server/target/
+server/hs_err_pid*.log
+
+# Frontend dependencies and build output
+web/node_modules/
+web/dist/
+web/coverage/
+web/test-results/
+web/playwright-report/
+
+# Local credentials and certificates
+**/.env
+**/.env.*
+!**/.env.example
+web/certs/
+
+# Runtime data must remain outside the Git repository
+*.osm
+*.osm.pbf
+*.pbf
+graph-cache/
+snapshots/
+camera-safe-routing-data/
+
+# Logs and operating-system files
+*.log
+.DS_Store
+Thumbs.db
