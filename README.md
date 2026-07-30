@@ -148,7 +148,60 @@ npm ci
 npm run dev
 ```
 
-桌面浏览器通常可通过 `http://localhost:5173` 访问。手机定位需要可信 HTTPS 和浏览器位置权限，证书准备及真机步骤见 [验证与测试指南](docs/验证与测试指南.md)。
+桌面浏览器通常可通过 `http://localhost:5173` 访问。
+
+### 手机 HTTPS 开发
+
+手机通过局域网访问时，浏览器 Geolocation 通常要求可信 HTTPS。`npm run dev:https` 固定读取：
+
+```text
+web/certs/dev-cert.pem
+web/certs/dev-key.pem
+```
+
+这两个文件不会提交到 Git，每台开发电脑都需要单独生成。Windows 推荐通过 winget 安装：
+
+```powershell
+winget install FiloSottile.mkcert
+```
+
+winget 不可用时，可从 [mkcert 官方发行版](https://github.com/FiloSottile/mkcert/releases) 安装。安装后重新打开 PowerShell，并确认可以执行 `mkcert`。
+
+先通过 `ipconfig` 找到电脑当前局域网 IPv4，例如 `192.168.1.20`，然后在 `web` 目录执行：
+
+```powershell
+Set-Location .\web
+New-Item -ItemType Directory -Path .\certs -Force | Out-Null
+mkcert -install
+mkcert `
+  -cert-file .\certs\dev-cert.pem `
+  -key-file .\certs\dev-key.pem `
+  localhost 127.0.0.1 ::1 192.168.1.20
+npm run dev:https
+```
+
+把示例 IP 替换为本机实际局域网 IP。证书必须包含手机访问时使用的 IP；电脑 IP 变化后需要重新生成证书。
+
+电脑执行 `mkcert -install` 后会信任本地开发 CA。手机还需要信任同一个开发 CA：
+
+```powershell
+mkcert -CAROOT
+```
+
+该命令会显示 CA 目录。只把其中的 `rootCA.pem` 安装到自己的测试手机，绝不能复制或分享 `rootCA-key.pem`。
+
+- Android：在系统安全设置中选择“安装 CA 证书”，菜单名称因系统版本而异。
+- iOS：安装 `rootCA.pem` 描述文件后，还要在“设置 -> 通用 -> 关于本机 -> 证书信任设置”中启用完全信任。
+
+随后在手机访问：
+
+```text
+https://192.168.1.20:5173
+```
+
+手机与电脑必须处于同一局域网，Windows 防火墙需要允许 Node/Vite，且高德控制台应允许当前开发来源。地址栏仍有证书警告时，定位权限通常不会正常工作；证书可信后还要在浏览器站点设置中允许位置访问。
+
+完整真机检查项见 [验证与测试指南](docs/验证与测试指南.md)。
 
 ## 常用验证
 
@@ -203,4 +256,3 @@ npm run build
 `server` 和 `web` 当前各自包含一份历史 `.git` 元数据。直接在 `code` 下执行 `git init` 会形成嵌套仓库，父仓库可能只记录 gitlink 而不记录真实源码。建立统一仓库前，应先把两份 `.git` 完整移动到 `code` 目录之外备份，确认 `git add server web` 能看到普通源码文件后再提交。
 
 不要删除或覆盖这两份历史元数据，除非已经确认不需要各自的提交历史。新的根级 `.gitignore` 已排除构建产物、密钥、证书和运行数据。
-
