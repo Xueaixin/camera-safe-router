@@ -1,0 +1,57 @@
+[
+  {
+    "Id": "eligible",
+    "Lng": 116.3,
+    "Lat": 39.9,
+    "IsSixRingOut": "0",
+    "CameraType": "类型",
+    "Address": "六环内"
+  },
+  {
+    "Id": "outside",
+    "Lng": 116.4,
+    "Lat": 39.9,
+    "IsSixRingOut": "1",
+    "CameraType": "类型",
+    "Address": "六环外"
+  },
+  {
+    "Id": "missing",
+    "Lng": 116.5,
+    "Lat": 39.9,
+    "CameraType": "类型",
+    "Address": "口径缺失"
+  },
+  {
+    "Id": "numeric-zero",
+    "Lng": 116.6,
+    "Lat": 39.9,
+    "IsSixRingOut": 0,
+    "CameraType": "类型",
+    "Address": "数字口径"
+  },
+  {
+    "Id": "whitespace-zero",
+    "Lng": 116.7,
+    "Lat": 39.9,
+    "IsSixRingOut": " 0 ",
+    "CameraType": "类型",
+    "Address": "带空格口径"
+  },
+  {
+    "Id": "unknown",
+    "Lng": 116.8,
+    "Lat": 39.9,
+    "IsSixRingOut": "2",
+    "CameraType": "类型",
+    "Address": "未知口径"
+  },
+  {
+    "Id": "numeric-one",
+    "Lng": 116.9,
+    "Lat": 39.9,
+    "IsSixRingOut": 1,
+    "CameraType": "类型",
+    "Address": "数字六环外口径"
+  }
+]

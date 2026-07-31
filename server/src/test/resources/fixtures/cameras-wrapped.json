@@ -5,6 +5,7 @@
       "District": "朝阳区",
       "Lng": "116.517677",
       "Lat": "40.001365",
+      "IsSixRingOut": "0",
       "CameraType": "拍进京证",
       "Address": "包装对象测试 [东向西]"
     }

@@ -43,7 +43,10 @@ public final class RoutingSnapshotBuilder {
                         ? "no records"
                         : loaded.issues().getFirst().reason();
                 throw new SnapshotBuildException("camera JSON validation failed: valid="
-                        + loaded.cameras().size() + " source=" + loaded.sourceRecordCount()
+                        + loaded.cameras().size() + " retained=" + loaded.retainedRecordCount()
+                        + " source=" + loaded.sourceRecordCount()
+                        + " outsideSixRing=" + loaded.outsideSixRingRecordCount()
+                        + " unrecognizedIsSixRingOut=" + loaded.unrecognizedSixRingOutRecordCount()
                         + " issues=" + loaded.issues().size() + " firstIssue=" + firstIssue);
             }
             CameraSnapshot cameraSnapshot = CameraSnapshot.from(loaded);

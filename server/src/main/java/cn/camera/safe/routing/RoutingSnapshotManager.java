@@ -33,8 +33,12 @@ public final class RoutingSnapshotManager {
             store.persist(candidate);
             current.set(candidate);
             lastFailure = null;
-            LOGGER.info("Published routing snapshot cameras={} blockedEdges={} matched={} unmatched={}",
-                    candidate.cameraSnapshot().cameras().size(),
+            LOGGER.info("Published routing snapshot sourceCameras={} retainedCameras={} "
+                            + "outsideSixRing={} unrecognizedIsSixRingOut={} blockedEdges={} matched={} unmatched={}",
+                    candidate.cameraSnapshot().sourceRecordCount(),
+                    candidate.cameraSnapshot().retainedRecordCount(),
+                    candidate.cameraSnapshot().outsideSixRingRecordCount(),
+                    candidate.cameraSnapshot().unrecognizedSixRingOutRecordCount(),
                     candidate.blockedEdges().blockedEdgeCount(),
                     candidate.matchedCameraCount(),
                     candidate.unmatchedCameraIds().size());

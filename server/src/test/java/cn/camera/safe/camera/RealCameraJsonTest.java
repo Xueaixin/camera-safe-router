@@ -24,6 +24,10 @@ class RealCameraJsonTest {
 
         assertThat(result.isValid()).isTrue();
         assertThat(result.sourceRecordCount()).isEqualTo(6_797);
+        assertThat(result.retainedRecordCount()).isEqualTo(5_704);
+        assertThat(result.outsideSixRingRecordCount()).isEqualTo(1_093);
+        assertThat(result.unrecognizedSixRingOutRecordCount()).isEqualTo(7);
+        assertThat(result.cameras()).hasSize(5_704);
         assertThat(result.sourceSha256())
                 .isEqualTo("f2e1ce2392a2e1f029f42e0fa7728044c72475725dd40944794afb42c44ca65a");
         JsonNode candidates = new ObjectMapper().readTree(
@@ -31,8 +35,18 @@ class RealCameraJsonTest {
         Set<String> candidateIds = new HashSet<>();
         candidates.forEach(item -> candidateIds.add(item.path("id").asText()));
         assertThat(candidateIds).hasSize(50);
-        assertThat(result.cameras()).extracting(CameraPoint::id).containsAll(candidateIds);
-        System.out.printf("REAL_CAMERA_JSON records=%d sha256=%s%n",
-                result.sourceRecordCount(), result.sourceSha256());
+        Set<String> loadedCandidateIds = new HashSet<>();
+        result.cameras().stream()
+                .map(CameraPoint::id)
+                .filter(candidateIds::contains)
+                .forEach(loadedCandidateIds::add);
+        assertThat(loadedCandidateIds).hasSize(45);
+        System.out.printf(
+                "REAL_CAMERA_JSON source=%d retained=%d outside=%d unrecognizedIsSixRingOut=%d sha256=%s%n",
+                result.sourceRecordCount(),
+                result.retainedRecordCount(),
+                result.outsideSixRingRecordCount(),
+                result.unrecognizedSixRingOutRecordCount(),
+                result.sourceSha256());
     }
 }

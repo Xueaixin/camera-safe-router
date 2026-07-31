@@ -18,6 +18,8 @@ class CameraJsonLoaderTest {
 
         assertThat(result.isValid()).isTrue();
         assertThat(result.sourceRecordCount()).isEqualTo(2);
+        assertThat(result.retainedRecordCount()).isEqualTo(2);
+        assertThat(result.excludedRecordCount()).isZero();
         assertThat(result.cameras()).extracting(CameraPoint::id)
                 .containsExactly("camera-a", "camera-b");
         assertThat(result.cameras()).extracting(camera -> camera.gcj02().lng()).containsOnly(116.329009);
@@ -30,8 +32,24 @@ class CameraJsonLoaderTest {
         CameraLoadResult result = loader.load(fixture("cameras-wrapped.json"));
 
         assertThat(result.isValid()).isTrue();
+        assertThat(result.retainedRecordCount()).isEqualTo(1);
         assertThat(result.cameras()).singleElement()
                 .extracting(CameraPoint::id).isEqualTo("camera-wrapped");
+    }
+
+    @Test
+    void excludesOnlySemanticOneAndRetainsMissingOrUnrecognizedValues() throws Exception {
+        CameraLoadResult result = loader.load(fixture("cameras-six-ring-filter.json"));
+
+        assertThat(result.isValid()).isTrue();
+        assertThat(result.sourceRecordCount()).isEqualTo(7);
+        assertThat(result.retainedRecordCount()).isEqualTo(5);
+        assertThat(result.outsideSixRingRecordCount()).isEqualTo(2);
+        assertThat(result.unrecognizedSixRingOutRecordCount()).isEqualTo(3);
+        assertThat(result.excludedRecordCount()).isEqualTo(2);
+        assertThat(result.cameras()).extracting(CameraPoint::id)
+                .containsExactly("eligible", "missing", "numeric-zero", "whitespace-zero", "unknown");
+        assertThat(result.issues()).isEmpty();
     }
 
     @Test
@@ -40,6 +58,8 @@ class CameraJsonLoaderTest {
 
         assertThat(result.isValid()).isFalse();
         assertThat(result.sourceRecordCount()).isEqualTo(4);
+        assertThat(result.retainedRecordCount()).isEqualTo(4);
+        assertThat(result.excludedRecordCount()).isZero();
         assertThat(result.cameras()).hasSize(1);
         assertThat(result.issues()).hasSize(3);
         assertThat(result.issues()).extracting(CameraValidationIssue::reason)

@@ -53,7 +53,11 @@ class RealRoutingSnapshotIntegrationTest {
             BlockedEdgeBuildResult radius50 = generator.generate(
                     cameraSnapshot, graphManager.requireRoadEdgeIndex(), 50);
 
-            assertThat(cameraSnapshot.cameras()).hasSize(6_797);
+            assertThat(cameraSnapshot.sourceRecordCount()).isEqualTo(6_797);
+            assertThat(cameraSnapshot.retainedRecordCount()).isEqualTo(5_704);
+            assertThat(cameraSnapshot.outsideSixRingRecordCount()).isEqualTo(1_093);
+            assertThat(cameraSnapshot.unrecognizedSixRingOutRecordCount()).isEqualTo(7);
+            assertThat(cameraSnapshot.cameras()).hasSize(5_704);
             assertThat(radius20.snapshot().blockedEdgeCount())
                     .isLessThanOrEqualTo(radius30.snapshot().blockedEdgeCount());
             assertThat(radius30.snapshot().blockedEdgeCount())
@@ -65,6 +69,9 @@ class RealRoutingSnapshotIntegrationTest {
             assertThat(radius30.snapshot().blockedForwardCount())
                     .isEqualTo(radius30.snapshot().blockedReverseCount())
                     .isPositive();
+            assertThat(radius30.matchedCameraCount()).isEqualTo(5_685);
+            assertThat(radius30.unmatchedCameraIds()).hasSize(19);
+            assertThat(radius30.snapshot().blockedEdgeCount()).isEqualTo(19_729);
 
             RoutingSnapshot routingSnapshot = new RoutingSnapshot(
                     cameraSnapshot,
@@ -77,6 +84,12 @@ class RealRoutingSnapshotIntegrationTest {
             Path persisted = new RoutingSnapshotStore(
                     new ObjectMapper().findAndRegisterModules(), properties).persist(routingSnapshot);
             assertThat(persisted).isRegularFile();
+            var persistedJson = new ObjectMapper().readTree(persisted.toFile());
+            assertThat(persistedJson.path("cameraSourceRecordCount").asInt()).isEqualTo(6_797);
+            assertThat(persistedJson.path("cameraRetainedRecordCount").asInt()).isEqualTo(5_704);
+            assertThat(persistedJson.path("cameraOutsideSixRingRecordCount").asInt()).isEqualTo(1_093);
+            assertThat(persistedJson.path("cameraUnrecognizedSixRingOutRecordCount").asInt()).isEqualTo(7);
+            assertThat(persistedJson.path("cameraCount").asInt()).isEqualTo(5_704);
 
             VerifiedRoute verifiedRoute = findVerifiedRoute(
                     new GraphHopperRoutingEngine(graphManager, properties),

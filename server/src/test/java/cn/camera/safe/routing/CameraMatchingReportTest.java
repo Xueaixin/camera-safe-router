@@ -8,6 +8,7 @@ import cn.camera.safe.config.AppProperties;
 import cn.camera.safe.coordinate.CoordinateConverter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -51,19 +52,18 @@ class CameraMatchingReportTest {
         GraphHopperManager graphManager = new GraphHopperManager(properties);
         graphManager.initialize();
         try {
-            CameraLoadResult loaded = new CameraJsonLoader(
-                    objectMapper, new CoordinateConverter()).load(cameraJson);
+            CameraJsonLoader loader = new CameraJsonLoader(objectMapper, new CoordinateConverter());
+            CameraLoadResult loaded = loader.load(cameraJson);
             assertThat(loaded.isValid()).isTrue();
-            CameraSnapshot allCameras = CameraSnapshot.from(loaded);
             RawEligibility rawEligibility = readEligibility(objectMapper, cameraJson);
-            List<CameraPoint> eligiblePoints = allCameras.cameras().stream()
-                    .filter(camera -> rawEligibility.eligibleIds().contains(camera.id()))
-                    .toList();
-            CameraSnapshot eligibleCameras = new CameraSnapshot(
-                    allCameras.version() + "|IsSixRingOut=0",
-                    allCameras.sourceSha256(),
-                    allCameras.loadedAt(),
-                    eligiblePoints);
+            assertThat(loaded.sourceRecordCount()).isEqualTo(rawEligibility.sourceCount());
+            assertThat(loaded.retainedRecordCount()).isEqualTo(rawEligibility.retainedIds().size());
+            assertThat(loaded.outsideSixRingRecordCount()).isEqualTo(rawEligibility.excluded());
+            assertThat(loaded.unrecognizedSixRingOutRecordCount())
+                    .isEqualTo(rawEligibility.missingOrInvalid());
+            CameraSnapshot eligibleCameras = CameraSnapshot.from(loaded);
+            List<CameraPoint> eligiblePoints = eligibleCameras.cameras();
+            CameraSnapshot allCameras = loadAllForComparison(objectMapper, loader, cameraJson);
 
             RoadEdgeIndex roadIndex = graphManager.requireRoadEdgeIndex();
             BlockedEdgeGenerator generator = new BlockedEdgeGenerator();
@@ -91,7 +91,7 @@ class CameraMatchingReportTest {
             Files.createDirectories(output.getParent());
             Files.writeString(output, report, StandardCharsets.UTF_8);
             assertThat(output).isRegularFile();
-            assertThat(eligiblePoints).hasSize(rawEligibility.eligibleIds().size());
+            assertThat(eligiblePoints).hasSize(rawEligibility.retainedIds().size());
             System.out.printf(
                     "CAMERA_MATCHING_REPORT output=%s allMatched=%d allUnmatched=%d "
                             + "eligible=%d eligibleMatched=%d eligibleUnmatched=%d%n",
@@ -104,6 +104,25 @@ class CameraMatchingReportTest {
         } finally {
             graphManager.close();
         }
+    }
+
+    private CameraSnapshot loadAllForComparison(
+            ObjectMapper objectMapper,
+            CameraJsonLoader loader,
+            Path source) throws Exception {
+        JsonNode root = objectMapper.readTree(Files.readAllBytes(source));
+        JsonNode records = root.isArray() ? root : firstArray(root);
+        for (JsonNode record : records) {
+            if (record.isObject()) {
+                ((ObjectNode) record).put("IsSixRingOut", "0");
+            }
+        }
+        Path comparisonSource = temporaryDirectory.resolve("all-cameras-for-report.json");
+        objectMapper.writeValue(comparisonSource.toFile(), root);
+        CameraLoadResult allRecords = loader.load(comparisonSource);
+        assertThat(allRecords.isValid()).isTrue();
+        assertThat(allRecords.cameras()).hasSize(records.size());
+        return CameraSnapshot.from(allRecords);
     }
 
     private AppProperties properties(Path pbf, Path cameras) {
@@ -128,24 +147,32 @@ class CameraMatchingReportTest {
     private static RawEligibility readEligibility(ObjectMapper objectMapper, Path source) throws Exception {
         JsonNode root = objectMapper.readTree(Files.readAllBytes(source));
         JsonNode records = root.isArray() ? root : firstArray(root);
-        Set<String> eligibleIds = new HashSet<>();
+        Set<String> retainedIds = new HashSet<>();
         Map<String, String> valuesById = new HashMap<>();
         int excluded = 0;
         int missingOrInvalid = 0;
         for (JsonNode record : records) {
             String id = record.path("Id").asText("");
             JsonNode value = record.get("IsSixRingOut");
-            String normalized = value == null || value.isNull() ? "<缺失>" : value.asText().trim();
+            String normalized = value == null || value.isNull()
+                    ? "<缺失>"
+                    : value.isTextual() ? value.textValue() : "<非字符串:" + value + ">";
             valuesById.put(id, normalized);
-            if ("0".equals(normalized)) {
-                eligibleIds.add(id);
-            } else if ("1".equals(normalized)) {
+            if (value != null && ((value.isTextual() && "1".equals(value.textValue()))
+                    || (value.isNumber() && value.decimalValue().compareTo(java.math.BigDecimal.ONE) == 0))) {
                 excluded++;
             } else {
-                missingOrInvalid++;
+                retainedIds.add(id);
+                boolean recognizedInside = value != null
+                        && ((value.isTextual() && "0".equals(value.textValue()))
+                        || (value.isNumber()
+                        && value.decimalValue().compareTo(java.math.BigDecimal.ZERO) == 0));
+                if (!recognizedInside) {
+                    missingOrInvalid++;
+                }
             }
         }
-        return new RawEligibility(records.size(), eligibleIds, excluded, missingOrInvalid, valuesById);
+        return new RawEligibility(records.size(), retainedIds, excluded, missingOrInvalid, valuesById);
     }
 
     private static JsonNode firstArray(JsonNode root) {
@@ -240,13 +267,14 @@ class CameraMatchingReportTest {
                 .append(" 条，图边界外 ").append(allOutside)
                 .append(" 条；30 米未匹配点中，边界内 ").append(allUnmatchedInside)
                 .append(" 条，边界外 ").append(allUnmatchedOutside).append(" 条。\n\n")
-                .append("## 3. `IsSixRingOut = 0` 正式口径\n\n")
+                .append("## 3. `IsSixRingOut != 1` 正式口径\n\n")
                 .append("| 项目 | 数量 |\n|---|---:|\n")
                 .append("| 源记录 | ").append(eligibility.sourceCount()).append(" |\n")
-                .append("| 纳入：`IsSixRingOut = 0` | ")
-                .append(eligibility.eligibleIds().size()).append(" |\n")
+                .append("| 纳入：`IsSixRingOut != 1` | ")
+                .append(eligibility.retainedIds().size()).append(" |\n")
                 .append("| 排除：`IsSixRingOut = 1` | ").append(eligibility.excluded()).append(" |\n")
-                .append("| 排除：字段缺失或非法 | ").append(eligibility.missingOrInvalid()).append(" |\n")
+                .append("| 纳入但标记异常：字段缺失或非法 | ")
+                .append(eligibility.missingOrInvalid()).append(" |\n")
                 .append("| 30 米匹配 | ").append(eligible30.matchedCameraCount()).append(" |\n")
                 .append("| 30 米未匹配 | ").append(eligible30.unmatchedCameraIds().size()).append(" |\n")
                 .append("| 双向禁行基础边 | ").append(eligible30.snapshot().blockedEdgeCount()).append(" |\n")
@@ -256,13 +284,13 @@ class CameraMatchingReportTest {
                 .append("| 未匹配且边界外 | ").append(eligibleUnmatchedOutside).append(" |\n\n")
                 .append("## 4. 全量口径30米未匹配明细\n\n");
         appendUnmatchedTable(report, allDetails, eligibility.valuesById());
-        report.append("\n## 5. 六环内正式口径30米未匹配明细\n\n");
+        report.append("\n## 5. 生产保留口径30米未匹配明细\n\n");
         appendUnmatchedTable(report, eligibleDetails, eligibility.valuesById());
         report.append("\n## 6. 结论边界\n\n")
                 .append("- 匹配表示点位30米范围内至少存在一条可驾车基础边，不代表主辅路、高架层级一定正确。\n")
                 .append("- 图边界外点位无法参与当前 PBF 内的路线搜索。\n")
                 .append("- 范围内未匹配点应优先人工检查坐标、道路缺失和离路距离。\n")
-                .append("- 生产快照仍需在代码中正式实现 `IsSixRingOut = 0` 过滤；本报告只是独立计算该口径。\n");
+                .append("- 生产快照加载器只排除语义为 `IsSixRingOut = 1` 的记录；缺失或非法值保留并计数。\n");
         return report.toString();
     }
 
@@ -308,7 +336,7 @@ class CameraMatchingReportTest {
 
     private record RawEligibility(
             int sourceCount,
-            Set<String> eligibleIds,
+            Set<String> retainedIds,
             int excluded,
             int missingOrInvalid,
             Map<String, String> valuesById) {

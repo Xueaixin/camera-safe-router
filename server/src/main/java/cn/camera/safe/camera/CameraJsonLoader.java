@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -44,9 +45,22 @@ public final class CameraJsonLoader {
         List<CameraPoint> cameras = new ArrayList<>(records.size());
         List<CameraValidationIssue> issues = new ArrayList<>();
         Set<String> ids = new HashSet<>();
+        int retainedRecordCount = 0;
+        int outsideSixRingRecordCount = 0;
+        int unrecognizedSixRingOutRecordCount = 0;
 
         for (int index = 0; index < records.size(); index++) {
             JsonNode record = records.get(index);
+            JsonNode isSixRingOut = record == null ? null : record.get("IsSixRingOut");
+            if (isOutsideSixRing(isSixRingOut)) {
+                outsideSixRingRecordCount++;
+                continue;
+            }
+
+            retainedRecordCount++;
+            if (!isInsideSixRing(isSixRingOut)) {
+                unrecognizedSixRingOutRecordCount++;
+            }
             String id = text(record, "Id");
             try {
                 if (!record.isObject()) {
@@ -77,7 +91,32 @@ public final class CameraJsonLoader {
         }
 
         return new CameraLoadResult(
-                sha256(bytes), loadedAt, records.size(), cameras, issues);
+                sha256(bytes),
+                loadedAt,
+                records.size(),
+                retainedRecordCount,
+                outsideSixRingRecordCount,
+                unrecognizedSixRingOutRecordCount,
+                cameras,
+                issues);
+    }
+
+    private static boolean isOutsideSixRing(JsonNode value) {
+        return hasFlagValue(value, BigDecimal.ONE);
+    }
+
+    private static boolean isInsideSixRing(JsonNode value) {
+        return hasFlagValue(value, BigDecimal.ZERO);
+    }
+
+    private static boolean hasFlagValue(JsonNode value, BigDecimal expected) {
+        if (value == null || value.isNull()) {
+            return false;
+        }
+        if (value.isTextual()) {
+            return expected.toPlainString().equals(value.textValue());
+        }
+        return value.isNumber() && value.decimalValue().compareTo(expected) == 0;
     }
 
     private static JsonNode locateRecords(JsonNode root) {
