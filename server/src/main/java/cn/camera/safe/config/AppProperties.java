@@ -3,6 +3,7 @@ package cn.camera.safe.config;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -33,7 +34,28 @@ public record AppProperties(
             @NotBlank String snapshotPath,
             boolean sourceCoordinateVerified,
             @Min(1) int maxBboxResults,
-            @DecimalMin("0.001") @DecimalMax("10.0") double maxBboxSpanDegrees) {
+            @DecimalMin("0.001") @DecimalMax("10.0") double maxBboxSpanDegrees,
+            @NotNull @Valid Update update) {
+    }
+
+    public record Update(
+            boolean enabled,
+            @NotBlank String sourceUrl,
+            @NotBlank String cron,
+            @NotBlank String zone,
+            @NotBlank String downloadPath,
+            @NotBlank String failedPath,
+            @NotBlank String backupPath,
+            @NotNull Duration connectTimeout,
+            @NotNull Duration requestTimeout,
+            @Min(1024) @Max(104857600) int maxDownloadBytes,
+            @Min(1) int minSourceRecordCount,
+            @DecimalMin("0.0") @DecimalMax("1.0") double maxSourceCountChangeRatio,
+            @DecimalMin("0.0") @DecimalMax("1.0") double minMatchRate,
+            @DecimalMin("0.0") @DecimalMax("1.0") double maxBlockedEdgeChangeRatio,
+            @Min(1) int backupRetentionCount,
+            @Min(1) int snapshotRetentionCount,
+            @Min(1) int failedRetentionCount) {
     }
 
     public record Admin(boolean localOnly) {

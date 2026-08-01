@@ -10,7 +10,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Stream;
 
 @Component
 public final class RoutingSnapshotStore {
@@ -25,9 +27,17 @@ public final class RoutingSnapshotStore {
     public Path persist(RoutingSnapshot snapshot) throws IOException {
         Path directory = Path.of(properties.cameras().snapshotPath()).toAbsolutePath().normalize();
         Files.createDirectories(directory);
-        String sourcePrefix = snapshot.cameraSnapshot().sourceSha256().substring(0, 12);
-        Path target = directory.resolve("routing-snapshot-"
-                + snapshot.cameraSnapshot().loadedAt().toEpochMilli() + "-" + sourcePrefix + ".json");
+        String contentFingerprint = Hashing.sha256(
+                "camera=" + snapshot.cameraSnapshot().sourceSha256()
+                        + "|graph=" + snapshot.graphFingerprint()
+                        + "|radius=" + snapshot.safetyRadiusMeters()
+                        + "|retained=" + snapshot.cameraSnapshot().retainedRecordCount()
+                        + "|matched=" + snapshot.matchedCameraCount()
+                        + "|blocked=" + snapshot.blockedEdges().blockedEdgeVersion());
+        Path target = directory.resolve("routing-snapshot-" + contentFingerprint + ".json");
+        if (Files.isRegularFile(target)) {
+            return target;
+        }
         Path temporary = Files.createTempFile(directory, target.getFileName().toString(), ".tmp");
         PersistedSnapshot persisted = new PersistedSnapshot(
                 snapshot.cameraSnapshot().version(),
@@ -55,6 +65,34 @@ public final class RoutingSnapshotStore {
             throw new IOException("snapshot filesystem does not support atomic publication", exception);
         } finally {
             Files.deleteIfExists(temporary);
+        }
+    }
+
+    public void prune() throws IOException {
+        Path directory = Path.of(properties.cameras().snapshotPath()).toAbsolutePath().normalize();
+        if (!Files.isDirectory(directory)) {
+            return;
+        }
+        int retentionCount = properties.cameras().update().snapshotRetentionCount();
+        List<Path> snapshots;
+        try (Stream<Path> entries = Files.list(directory)) {
+            snapshots = entries
+                    .filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().startsWith("routing-snapshot-"))
+                    .filter(path -> path.getFileName().toString().endsWith(".json"))
+                    .sorted(Comparator.comparingLong(RoutingSnapshotStore::lastModified).reversed())
+                    .toList();
+        }
+        for (int index = retentionCount; index < snapshots.size(); index++) {
+            Files.deleteIfExists(snapshots.get(index));
+        }
+    }
+
+    private static long lastModified(Path path) {
+        try {
+            return Files.getLastModifiedTime(path).toMillis();
+        } catch (IOException exception) {
+            return Long.MIN_VALUE;
         }
     }
 

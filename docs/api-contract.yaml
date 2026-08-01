@@ -118,6 +118,27 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/admin/camera-data/update:
+    post:
+      tags: [Operations]
+      operationId: updateCameraData
+      summary: 立即下载、校验并发布最新摄像头数据
+      description: 仅允许本机调用；与后端内部定时任务复用同一更新流程和防重入锁。
+      responses:
+        '200':
+          description: 已发布新版本，或远程内容与当前版本相同
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CameraUpdateResult'
+        '409':
+          description: 已有摄像头更新或快照刷新正在执行
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/health:
     get:
       tags: [Operations]
@@ -358,6 +379,53 @@ components:
         status:
           type: string
           enum: [ACCEPTED]
+    CameraUpdateResult:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - sourceSha256
+        - sourceRecordCount
+        - retainedRecordCount
+        - excludedRecordCount
+        - unrecognizedIsSixRingOutCount
+        - matchedCameraCount
+        - unmatchedCameraCount
+        - blockedEdgeCount
+        - completedAt
+      properties:
+        status:
+          type: string
+          enum: [UPDATED, NO_CHANGE]
+        sourceSha256:
+          type: string
+        previousSourceSha256:
+          type: string
+          nullable: true
+        sourceRecordCount:
+          type: integer
+          minimum: 1
+        retainedRecordCount:
+          type: integer
+          minimum: 1
+        excludedRecordCount:
+          type: integer
+          minimum: 0
+        unrecognizedIsSixRingOutCount:
+          type: integer
+          minimum: 0
+        matchedCameraCount:
+          type: integer
+          minimum: 0
+        unmatchedCameraCount:
+          type: integer
+          minimum: 0
+        blockedEdgeCount:
+          type: integer
+          minimum: 0
+        completedAt:
+          type: string
+          format: date-time
     HealthResponse:
       type: object
       additionalProperties: false
@@ -414,5 +482,7 @@ components:
         - ROUTING_NOT_READY
         - CAMERA_SNAPSHOT_NOT_READY
         - REFRESH_ALREADY_RUNNING
+        - CAMERA_UPDATE_ALREADY_RUNNING
+        - CAMERA_UPDATE_FAILED
         - INTERNAL_ERROR
 

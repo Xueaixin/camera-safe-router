@@ -4,11 +4,15 @@ import cn.camera.safe.api.model.HealthResponse;
 import cn.camera.safe.api.model.ReadinessResponse;
 import cn.camera.safe.api.model.RefreshAccepted;
 import cn.camera.safe.application.CameraRefreshService;
+import cn.camera.safe.api.model.CameraUpdateResult;
+import cn.camera.safe.camera.update.CameraUpdateService;
 import cn.camera.safe.config.AppProperties;
 import cn.camera.safe.routing.GraphHopperManager;
 import cn.camera.safe.routing.RoutingSnapshot;
 import cn.camera.safe.routing.RoutingSnapshotManager;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,9 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1")
 public final class OperationsController {
+    private static final Logger LOGGER = LoggerFactory.getLogger(OperationsController.class);
+
     private final GraphHopperManager graphManager;
     private final RoutingSnapshotManager snapshotManager;
     private final CameraRefreshService refreshService;
+    private final CameraUpdateService updateService;
     private final AdminAccessGuard adminAccessGuard;
     private final AppProperties properties;
 
@@ -29,11 +36,13 @@ public final class OperationsController {
             GraphHopperManager graphManager,
             RoutingSnapshotManager snapshotManager,
             CameraRefreshService refreshService,
+            CameraUpdateService updateService,
             AdminAccessGuard adminAccessGuard,
             AppProperties properties) {
         this.graphManager = graphManager;
         this.snapshotManager = snapshotManager;
         this.refreshService = refreshService;
+        this.updateService = updateService;
         this.adminAccessGuard = adminAccessGuard;
         this.properties = properties;
     }
@@ -68,6 +77,14 @@ public final class OperationsController {
         adminAccessGuard.requireLocal(request);
         String jobId = refreshService.requestRefresh();
         return ResponseEntity.accepted().body(new RefreshAccepted(jobId, "ACCEPTED"));
+    }
+
+    @PostMapping("/admin/camera-data/update")
+    public CameraUpdateResult updateCameraData(HttpServletRequest request) {
+        adminAccessGuard.requireLocal(request);
+        LOGGER.info("Manual camera data update request accepted remoteAddress={}",
+                request.getRemoteAddr());
+        return updateService.updateNow();
     }
 
     private String notReadyReason(boolean graphLoaded, boolean cameraLoaded, boolean blockedLoaded) {

@@ -17,19 +17,19 @@ class RealCameraJsonTest {
     void validatesCurrentCameraFileWithoutModifyingIt() throws Exception {
         String configuredJson = System.getProperty("real.camera.json");
         assumeTrue(configuredJson != null && !configuredJson.isBlank(),
-                "Set -Dreal.camera.json=<path-to-map.json> to run the real camera test");
+                "Set -Dreal.camera.json=<path-to-camera.json> to run the real camera test");
 
         CameraLoadResult result = new CameraJsonLoader(new ObjectMapper(), new CoordinateConverter())
                 .load(Path.of(configuredJson));
 
         assertThat(result.isValid()).isTrue();
-        assertThat(result.sourceRecordCount()).isEqualTo(6_797);
-        assertThat(result.retainedRecordCount()).isEqualTo(5_704);
-        assertThat(result.outsideSixRingRecordCount()).isEqualTo(1_093);
+        assertThat(result.sourceRecordCount()).isEqualTo(6_803);
+        assertThat(result.retainedRecordCount()).isEqualTo(5_707);
+        assertThat(result.outsideSixRingRecordCount()).isEqualTo(1_096);
         assertThat(result.unrecognizedSixRingOutRecordCount()).isEqualTo(7);
-        assertThat(result.cameras()).hasSize(5_704);
+        assertThat(result.cameras()).hasSize(5_707);
         assertThat(result.sourceSha256())
-                .isEqualTo("f2e1ce2392a2e1f029f42e0fa7728044c72475725dd40944794afb42c44ca65a");
+                .isEqualTo("0c16ed44ef2e24cd4759afba28d6448925db699a4d3b38b05980f076e6ac7404");
         JsonNode candidates = new ObjectMapper().readTree(
                 RealCameraJsonTest.class.getResourceAsStream("/fixtures/real-camera-candidates-50.json"));
         Set<String> candidateIds = new HashSet<>();

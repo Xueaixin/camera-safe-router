@@ -29,6 +29,10 @@ public final class RoutingSnapshotBuilder {
     }
 
     public RoutingSnapshot build() {
+        return build(Path.of(properties.cameras().jsonPath()));
+    }
+
+    public RoutingSnapshot build(Path cameraPath) {
         if (!properties.cameras().sourceCoordinateVerified()) {
             throw new SnapshotBuildException(
                     "camera source coordinate system has not been manually verified");
@@ -37,7 +41,7 @@ public final class RoutingSnapshotBuilder {
             throw new SnapshotBuildException("routing graph is not ready");
         }
         try {
-            CameraLoadResult loaded = cameraLoader.load(Path.of(properties.cameras().jsonPath()));
+            CameraLoadResult loaded = cameraLoader.load(cameraPath);
             if (!loaded.isValid()) {
                 String firstIssue = loaded.issues().isEmpty()
                         ? "no records"

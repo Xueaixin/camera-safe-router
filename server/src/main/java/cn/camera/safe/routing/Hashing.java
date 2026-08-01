@@ -29,6 +29,10 @@ public final class Hashing {
         return HexFormat.of().formatHex(digest().digest(value.getBytes(StandardCharsets.UTF_8)));
     }
 
+    public static String sha256(byte[] value) {
+        return HexFormat.of().formatHex(digest().digest(value));
+    }
+
     private static MessageDigest digest() {
         try {
             return MessageDigest.getInstance("SHA-256");

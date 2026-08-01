@@ -9,8 +9,9 @@
 - 前端 Vue 页面、地图展示、浏览器定位、摄像头图层和手动重新规划已实现。
 - 后端 Spring Boot API、GraphHopper 搜索期硬禁边、JTS 独立安全校验和快照持久化已实现。
 - 默认安全半径为 30 米；任何成功路线都必须满足 `cameraConflictCount = 0`，不存在违规降级路线。
-- 当前 `beijing-latest.osm.pbf` 对全量 6,797 个点的 30 米匹配结果为 6,777 个，匹配率 99.71%。
-- 生产加载器只排除 `IsSixRingOut` 语义为 `1` 的记录，缺失或非法值保留并计数；当前保留 5,704 个点，30 米匹配 5,685 个。
+- 当前摄像头源为 6,803 条；生产加载器只排除 `IsSixRingOut` 语义为 `1` 的记录，缺失或非法值保留并计数。
+- 当前保留 5,707 个点，其中 30 米匹配 5,688 个、未匹配 19 个。
+- 摄像头远程更新已支持后端内部定时执行和本机手动触发；默认关闭，确认数据源使用许可后通过环境变量开启。
 - 当前仅承诺北京区域、驾车、手动重新规划，不包含自动偏航重算和逐向导航。
 
 详细进度和未完成项见 [开发计划与当前进度](docs/开发计划与当前进度.md)。
@@ -22,7 +23,7 @@ flowchart LR
     U["移动端或桌面浏览器"] --> W["Vue 3 + 高德 Web JS API"]
     W -->|"WGS84 / GCJ-02 显式坐标"| A["Spring Boot API"]
     P["beijing-latest.osm.pbf"] --> G["GraphHopper 路网与缓存"]
-    C["摄像头 map.json"] --> S["摄像头与禁行边快照"]
+    C["摄像头 camera.json"] --> S["摄像头与禁行边快照"]
     G --> R["搜索期硬禁边路线引擎"]
     S --> R
     R --> V["JTS 最终路线独立校验"]
@@ -57,6 +58,8 @@ code/
 
 PBF、摄像头 JSON、图缓存、运行快照、证书和真实密钥不属于 Git 仓库。
 
+后端包职责、前端目录、启动/路线/更新调用链以及常见改动位置见 [代码结构与核心流程](docs/代码结构与核心流程.md)。
+
 ## 外部数据目录
 
 Windows 默认使用后端启动所在盘根目录的 `camera-safe-routing-data`。例如从 `F:` 盘的 IDEA 工程启动，默认目录为：
@@ -64,7 +67,7 @@ Windows 默认使用后端启动所在盘根目录的 `camera-safe-routing-data`
 ```text
 F:\camera-safe-routing-data\
 ├─ osm\beijing-latest.osm.pbf
-├─ cameras\map.json
+├─ cameras\camera.json
 ├─ graph-cache\beijing\
 ├─ snapshots\
 ├─ downloads\
@@ -92,7 +95,7 @@ ROUTING_DATA_ROOT=D:\camera-safe-routing-data
 |---|---|---|
 | 北京 OSM PBF | 当前北京路网 | [beijing-latest.osm.pbf](http://download.openstreetmap.fr/extracts/asia/china/beijing-latest.osm.pbf) |
 | 中国 OSM PBF | 后续自动切分京津冀 | [china-latest.osm.pbf](http://download.openstreetmap.fr/extracts/asia/china-latest.osm.pbf) |
-| 摄像头点位 | 禁行点快照 | `POST https://www.jjz365.cn/CameraData/GetAllRing`，当前开发阶段使用本地导出的 `map.json` |
+| 摄像头点位 | 禁行点快照 | `POST https://www.jjz365.cn/CameraData/GetAllRing`，正式文件名为 `camera.json` |
 
 OSM 数据遵循 Open Database License，地图或衍生数据发布时必须保留 OpenStreetMap 署名。摄像头接口的可用性、使用许可、频率限制和字段稳定性需要在自动同步上线前确认。
 
@@ -108,7 +111,7 @@ OSM 数据遵循 Open Database License，地图或衍生数据发布时必须保
 ## 后端启动
 
 1. 将北京 PBF 放到数据根目录的 `osm/beijing-latest.osm.pbf`。
-2. 将摄像头 JSON 放到 `cameras/map.json`。
+2. 将摄像头 JSON 放到 `cameras/camera.json`。
 3. IDEA 打开 `server/pom.xml`，Project SDK、Maven Runner JRE 均选择 JDK 21。
 4. 启动类为 `cn.camera.safe.CameraSafeRoutingApplication`，建议 VM options 使用 `-Xms1g -Xmx2g`。
 
@@ -235,6 +238,7 @@ npm run build
 | `GET` | `/api/v1/cameras` | 按地图范围查询点位 |
 | `GET` | `/api/v1/camera-snapshots/current` | 查询当前快照状态 |
 | `POST` | `/api/v1/admin/camera-snapshots/refresh` | 本机触发摄像头快照刷新 |
+| `POST` | `/api/v1/admin/camera-data/update` | 本机立即下载、校验并发布摄像头数据 |
 | `GET` | `/api/v1/health` | 进程存活状态 |
 | `GET` | `/api/v1/readiness` | 路网、摄像头和禁行边就绪状态 |
 
@@ -244,6 +248,7 @@ npm run build
 
 - [文档索引](docs/README.md)
 - [产品需求与技术方案](docs/产品需求与技术方案.md)
+- [代码结构与核心流程](docs/代码结构与核心流程.md)
 - [运行配置与数据目录](docs/运行配置与数据目录.md)
 - [开发计划与当前进度](docs/开发计划与当前进度.md)
 - [自动化数据更新方案](docs/自动化数据更新方案.md)

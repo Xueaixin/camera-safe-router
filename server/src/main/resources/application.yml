@@ -25,11 +25,29 @@ app:
     request-timeout: ${ROUTING_REQUEST_TIMEOUT:10s}
     max-visited-nodes: ${ROUTING_MAX_VISITED_NODES:1000000}
   cameras:
-    json-path: ${CAMERA_JSON_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/cameras/map.json}
+    json-path: ${CAMERA_JSON_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/cameras/camera.json}
     snapshot-path: ${CAMERA_SNAPSHOT_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/snapshots}
     source-coordinate-verified: ${CAMERA_SOURCE_COORDINATE_VERIFIED:true}
     max-bbox-results: ${CAMERA_MAX_BBOX_RESULTS:10000}
     max-bbox-span-degrees: ${CAMERA_MAX_BBOX_SPAN_DEGREES:1.0}
+    update:
+      enabled: ${CAMERA_UPDATE_ENABLED:false}
+      source-url: ${CAMERA_UPDATE_SOURCE_URL:https://www.jjz365.cn/CameraData/GetAllRing}
+      cron: ${CAMERA_UPDATE_CRON:0 15 3 * * *}
+      zone: ${CAMERA_UPDATE_ZONE:Asia/Shanghai}
+      download-path: ${CAMERA_UPDATE_DOWNLOAD_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/downloads/cameras}
+      failed-path: ${CAMERA_UPDATE_FAILED_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/work/cameras/failed}
+      backup-path: ${CAMERA_UPDATE_BACKUP_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/backups/cameras}
+      connect-timeout: ${CAMERA_UPDATE_CONNECT_TIMEOUT:10s}
+      request-timeout: ${CAMERA_UPDATE_REQUEST_TIMEOUT:30s}
+      max-download-bytes: ${CAMERA_UPDATE_MAX_DOWNLOAD_BYTES:10485760}
+      min-source-record-count: ${CAMERA_UPDATE_MIN_SOURCE_RECORD_COUNT:1000}
+      max-source-count-change-ratio: ${CAMERA_UPDATE_MAX_SOURCE_COUNT_CHANGE_RATIO:0.2}
+      min-match-rate: ${CAMERA_UPDATE_MIN_MATCH_RATE:0.98}
+      max-blocked-edge-change-ratio: ${CAMERA_UPDATE_MAX_BLOCKED_EDGE_CHANGE_RATIO:0.3}
+      backup-retention-count: ${CAMERA_UPDATE_BACKUP_RETENTION_COUNT:30}
+      snapshot-retention-count: ${CAMERA_UPDATE_SNAPSHOT_RETENTION_COUNT:20}
+      failed-retention-count: ${CAMERA_UPDATE_FAILED_RETENTION_COUNT:20}
   admin:
     local-only: ${ADMIN_LOCAL_ONLY:true}
 

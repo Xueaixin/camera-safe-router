@@ -24,6 +24,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import static cn.camera.safe.application.RoutePlanningServiceTest.updateProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -140,7 +142,8 @@ class CameraMatchingReportTest {
                         temporaryDirectory.resolve("snapshots").toString(),
                         true,
                         10_000,
-                        1),
+                        1,
+                        updateProperties()),
                 new AppProperties.Admin(true));
     }
 
@@ -258,7 +261,7 @@ class CameraMatchingReportTest {
                 .append("| 图边界 | `")
                 .append(escape(graphManager.requireHopper().getBaseGraph().getBounds().toString()))
                 .append("` |\n\n")
-                .append("## 2. 全量 6,797 条对照结果\n\n")
+                .append("## 2. 全量 ").append(allDetails.size()).append(" 条对照结果\n\n")
                 .append("| 半径 | 匹配 | 未匹配 | 双向禁行基础边 |\n|---:|---:|---:|---:|\n");
         appendRadius(report, 20, radius20);
         appendRadius(report, 30, radius30);

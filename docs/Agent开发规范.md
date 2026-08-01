@@ -73,7 +73,7 @@
 - 路径通过 `ROUTING_DATA_ROOT` 或单项变量配置，不写死开发机绝对路径。
 - PBF 使用 `beijing-latest.osm.pbf`、`china-latest.osm.pbf`、`jingjinji-latest.osm.pbf` 命名。
 - 不提交 PBF、图缓存、快照、下载临时文件、真实 `.env.local` 或 HTTPS 私钥。
-- 不修改原始 `map.json` 来让测试通过；生成候选文件和报告时使用新路径。
+- 不修改原始 `camera.json` 来让测试通过；生成候选文件和报告时使用新路径。
 - 更新 PBF 后必须使用新缓存并重新匹配摄像头，不能复用旧 edge ID。
 - 自动任务必须先写临时文件、校验、原子发布，并提供可验证回滚。
 

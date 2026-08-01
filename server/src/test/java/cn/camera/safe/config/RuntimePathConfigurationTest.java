@@ -19,9 +19,17 @@ class RuntimePathConfigurationTest {
         assertThat(environment.getRequiredProperty("app.routing.graph-cache-path"))
                 .isEqualTo("/camera-safe-routing-data/graph-cache/beijing");
         assertThat(environment.getRequiredProperty("app.cameras.json-path"))
-                .isEqualTo("/camera-safe-routing-data/cameras/map.json");
+                .isEqualTo("/camera-safe-routing-data/cameras/camera.json");
         assertThat(environment.getRequiredProperty("app.cameras.snapshot-path"))
                 .isEqualTo("/camera-safe-routing-data/snapshots");
+        assertThat(environment.getRequiredProperty("app.cameras.update.download-path"))
+                .isEqualTo("/camera-safe-routing-data/downloads/cameras");
+        assertThat(environment.getRequiredProperty("app.cameras.update.failed-path"))
+                .isEqualTo("/camera-safe-routing-data/work/cameras/failed");
+        assertThat(environment.getRequiredProperty("app.cameras.update.backup-path"))
+                .isEqualTo("/camera-safe-routing-data/backups/cameras");
+        assertThat(environment.getRequiredProperty("app.cameras.update.enabled"))
+                .isEqualTo("false");
     }
 
     @Test
@@ -34,9 +42,15 @@ class RuntimePathConfigurationTest {
         assertThat(environment.getRequiredProperty("app.routing.graph-cache-path"))
                 .isEqualTo("R:/routing-data/graph-cache/beijing");
         assertThat(environment.getRequiredProperty("app.cameras.json-path"))
-                .isEqualTo("R:/routing-data/cameras/map.json");
+                .isEqualTo("R:/routing-data/cameras/camera.json");
         assertThat(environment.getRequiredProperty("app.cameras.snapshot-path"))
                 .isEqualTo("R:/routing-data/snapshots");
+        assertThat(environment.getRequiredProperty("app.cameras.update.download-path"))
+                .isEqualTo("R:/routing-data/downloads/cameras");
+        assertThat(environment.getRequiredProperty("app.cameras.update.failed-path"))
+                .isEqualTo("R:/routing-data/work/cameras/failed");
+        assertThat(environment.getRequiredProperty("app.cameras.update.backup-path"))
+                .isEqualTo("R:/routing-data/backups/cameras");
     }
 
     private static MockEnvironment applicationEnvironment() throws IOException {

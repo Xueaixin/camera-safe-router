@@ -178,7 +178,29 @@ public class RoutePlanningServiceTest {
                         "pbf", "cache", 30, 1, 2,
                         Duration.ofSeconds(2), 10_000),
                 new AppProperties.Cameras(
-                        "cameras", "snapshots", true, 100, 1),
+                        "cameras", "snapshots", true, 100, 1,
+                        updateProperties()),
                 new AppProperties.Admin(true));
+    }
+
+    public static AppProperties.Update updateProperties() {
+        return new AppProperties.Update(
+                false,
+                "https://example.test/cameras",
+                "0 15 3 * * *",
+                "Asia/Shanghai",
+                "downloads",
+                "failed",
+                "backups",
+                Duration.ofSeconds(2),
+                Duration.ofSeconds(5),
+                10 * 1024 * 1024,
+                1,
+                0.2,
+                0.9,
+                0.3,
+                30,
+                20,
+                20);
     }
 }

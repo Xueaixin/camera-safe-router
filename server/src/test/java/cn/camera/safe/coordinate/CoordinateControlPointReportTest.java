@@ -15,7 +15,7 @@ class CoordinateControlPointReportTest {
     void writesReadOnlyControlPointCandidatesForManualAmapAndOsmReview() throws Exception {
         String configuredJson = System.getProperty("control.camera.json");
         assumeTrue(configuredJson != null && !configuredJson.isBlank(),
-                "Set -Dcontrol.camera.json=<path-to-map.json> to generate the report");
+                "Set -Dcontrol.camera.json=<path-to-camera.json> to generate the report");
 
         Path source = Path.of(configuredJson).toAbsolutePath().normalize();
         JsonNode root = new ObjectMapper().readTree(source.toFile());

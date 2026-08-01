@@ -1,6 +1,7 @@
 package cn.camera.safe.api;
 
 import cn.camera.safe.application.CameraRefreshService;
+import cn.camera.safe.camera.update.CameraUpdateService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import cn.camera.safe.camera.CameraPoint;
 import cn.camera.safe.camera.CameraSnapshot;
@@ -34,7 +35,8 @@ class OperationsControllerTest {
         RoutingSnapshotManager snapshots = mock(RoutingSnapshotManager.class);
         CameraRefreshService refresh = mock(CameraRefreshService.class);
         OperationsController controller = new OperationsController(
-                graph, snapshots, refresh, new AdminAccessGuard(properties()), properties());
+                graph, snapshots, refresh, mock(CameraUpdateService.class),
+                new AdminAccessGuard(properties()), properties());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .setMessageConverters(new MappingJackson2HttpMessageConverter(

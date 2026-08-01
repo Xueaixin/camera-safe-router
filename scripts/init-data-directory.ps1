@@ -22,9 +22,9 @@ $directories = @(
     (Join-Path $resolvedDataRoot 'cameras'),
     (Join-Path $resolvedDataRoot 'graph-cache\beijing'),
     (Join-Path $resolvedDataRoot 'snapshots'),
-    (Join-Path $resolvedDataRoot 'downloads'),
-    (Join-Path $resolvedDataRoot 'work'),
-    (Join-Path $resolvedDataRoot 'backups')
+    (Join-Path $resolvedDataRoot 'downloads\cameras'),
+    (Join-Path $resolvedDataRoot 'work\cameras\failed'),
+    (Join-Path $resolvedDataRoot 'backups\cameras')
 )
 
 foreach ($directory in $directories) {
@@ -34,7 +34,8 @@ foreach ($directory in $directories) {
 [PSCustomObject]@{
     DataRoot = $resolvedDataRoot
     BeijingPbf = Join-Path $resolvedDataRoot 'osm\beijing-latest.osm.pbf'
-    CameraJson = Join-Path $resolvedDataRoot 'cameras\map.json'
+    CameraJson = Join-Path $resolvedDataRoot 'cameras\camera.json'
+    CameraBackups = Join-Path $resolvedDataRoot 'backups\cameras'
     GraphCache = Join-Path $resolvedDataRoot 'graph-cache\beijing'
     Snapshots = Join-Path $resolvedDataRoot 'snapshots'
 } | Format-List
