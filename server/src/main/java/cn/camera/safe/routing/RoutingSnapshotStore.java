@@ -62,7 +62,7 @@ public final class RoutingSnapshotStore {
                     StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             return target;
         } catch (AtomicMoveNotSupportedException exception) {
-            throw new IOException("snapshot filesystem does not support atomic publication", exception);
+            throw new IOException("快照所在文件系统不支持原子发布", exception);
         } finally {
             Files.deleteIfExists(temporary);
         }

@@ -13,7 +13,7 @@ public final class HardAvoidingGraphHopper extends GraphHopper {
 
     public GHResponse route(GHRequest request, BlockedEdgeSnapshot snapshot, SearchAudit audit) {
         if (routeContext.get() != null) {
-            throw new IllegalStateException("Nested route calls are not supported");
+            throw new IllegalStateException("不支持嵌套路线调用");
         }
         routeContext.set(new RouteContext(Objects.requireNonNull(snapshot), Objects.requireNonNull(audit)));
         try {

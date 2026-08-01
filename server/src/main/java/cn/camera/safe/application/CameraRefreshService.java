@@ -48,9 +48,9 @@ public final class CameraRefreshService {
             executor.execute(() -> {
                 try {
                     snapshotManager.refreshNow();
-                    LOGGER.info("Camera snapshot refresh completed jobId={}", jobId);
+                    LOGGER.info("摄像头快照刷新完成 任务ID={}", jobId);
                 } catch (RuntimeException exception) {
-                    LOGGER.error("Camera snapshot refresh failed jobId={} type={} message={}",
+                    LOGGER.error("摄像头快照刷新失败 任务ID={} 异常类型={} 错误信息={}",
                             jobId, exception.getClass().getName(), exception.getMessage());
                 } finally {
                     acceptedOrRunning.set(false);

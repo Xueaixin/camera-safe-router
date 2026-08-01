@@ -38,7 +38,7 @@ public final class BlockedEdgeWeighting extends AbstractAdjustedWeighting {
             EdgeIteratorState detached = edgeState.detach(false);
             if (!(detached instanceof VirtualEdgeIteratorState virtualEdge)) {
                 throw new IllegalStateException(
-                        "GraphHopper virtual edge did not expose VirtualEdgeIteratorState: "
+                        "GraphHopper 虚拟边未提供 VirtualEdgeIteratorState: "
                                 + detached.getClass().getName());
             }
             orientedOriginalKey = virtualEdge.getOriginalEdgeKey();

@@ -28,6 +28,14 @@ class RuntimePathConfigurationTest {
                 .isEqualTo("/camera-safe-routing-data/work/cameras/failed");
         assertThat(environment.getRequiredProperty("app.cameras.update.backup-path"))
                 .isEqualTo("/camera-safe-routing-data/backups/cameras");
+        assertThat(environment.getRequiredProperty("logging.file.name"))
+                .isEqualTo("/camera-safe-routing-data/logs/camera-safe-routing-server.log");
+        assertThat(environment.getRequiredProperty("logging.logback.rollingpolicy.max-file-size"))
+                .isEqualTo("50MB");
+        assertThat(environment.getRequiredProperty("logging.logback.rollingpolicy.max-history"))
+                .isEqualTo("30");
+        assertThat(environment.getRequiredProperty("logging.logback.rollingpolicy.total-size-cap"))
+                .isEqualTo("2GB");
         assertThat(environment.getRequiredProperty("app.cameras.update.enabled"))
                 .isEqualTo("false");
     }
@@ -51,6 +59,10 @@ class RuntimePathConfigurationTest {
                 .isEqualTo("R:/routing-data/work/cameras/failed");
         assertThat(environment.getRequiredProperty("app.cameras.update.backup-path"))
                 .isEqualTo("R:/routing-data/backups/cameras");
+        assertThat(environment.getRequiredProperty("logging.file.name"))
+                .isEqualTo("R:/routing-data/logs/camera-safe-routing-server.log");
+        assertThat(environment.getRequiredProperty("logging.logback.rollingpolicy.file-name-pattern"))
+                .isEqualTo("R:/routing-data/logs/archive/camera-safe-routing-server.%d{yyyy-MM-dd}.%i.log.gz");
     }
 
     private static MockEnvironment applicationEnvironment() throws IOException {

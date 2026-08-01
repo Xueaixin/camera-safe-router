@@ -114,7 +114,7 @@ class CameraUpdateServiceTest {
         assertThatThrownBy(service::updateNow)
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
                     assertThat(exception.code()).isEqualTo(ErrorCode.CAMERA_UPDATE_FAILED);
-                    assertThat(exception.details().get("reason").toString()).contains("match rate");
+                    assertThat(exception.details().get("reason").toString()).contains("匹配率");
                 });
         verify(fileStore).quarantine(staged);
         verify(snapshotManager, never()).publishCandidate(any(), any());

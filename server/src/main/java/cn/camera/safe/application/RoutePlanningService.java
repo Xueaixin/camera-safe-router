@@ -102,8 +102,8 @@ public final class RoutePlanningService {
                 .map(coordinateConverter::toGcj02)
                 .map(point -> new OutputCoordinate(point.lng(), point.lat()))
                 .toList();
-        LOGGER.info("Route planned routeId={} cameraVersion={} blockedVersion={} distanceMeters={} "
-                        + "searchChecks={} virtualChecks={} blockedRejections={}",
+        LOGGER.info("路线规划完成 路线ID={} 摄像头版本={} 禁行边版本={} 距离米={} "
+                        + "搜索检查边数={} 虚拟边检查数={} 禁行拒绝数={}",
                 routeId,
                 snapshot.cameraSnapshot().version(),
                 snapshot.blockedEdges().blockedEdgeVersion(),

@@ -41,7 +41,7 @@ public final class GraphHopperManager {
         }
         if (!state.compareAndSet(GraphState.NOT_STARTED, GraphState.LOADING)
                 && !state.compareAndSet(GraphState.FAILED, GraphState.LOADING)) {
-            throw new IllegalStateException("graph initialization is already running");
+            throw new IllegalStateException("路网初始化正在执行");
         }
 
         HardAvoidingGraphHopper candidate = configuredHopper();
@@ -54,19 +54,19 @@ public final class GraphHopperManager {
             if (Files.isRegularFile(cache.resolve("properties"))) {
                 pbfHash = verifyExistingCache(cache, pbf);
                 if (!candidate.load()) {
-                    throw new IllegalStateException("GraphHopper cache could not be loaded");
+                    throw new IllegalStateException("GraphHopper 路网缓存无法加载");
                 }
-                LOGGER.info("Loaded GraphHopper cache nodes={} edges={}",
+                LOGGER.info("GraphHopper 路网缓存加载完成 节点数={} 边数={}",
                         candidate.getBaseGraph().getNodes(), candidate.getBaseGraph().getEdges());
             } else {
                 if (!Files.isRegularFile(pbf)) {
-                    throw new IllegalStateException("PBF is required when graph cache is absent");
+                    throw new IllegalStateException("路网缓存不存在时必须提供 PBF 文件");
                 }
                 pbfHash = Hashing.sha256(pbf);
                 candidate.setOSMFile(pbf.toString());
                 candidate.importOrLoad();
                 writeCacheSourceHash(cache, pbfHash);
-                LOGGER.info("Imported GraphHopper graph nodes={} edges={}",
+                LOGGER.info("GraphHopper 路网导入完成 节点数={} 边数={}",
                         candidate.getBaseGraph().getNodes(), candidate.getBaseGraph().getEdges());
             }
 
@@ -86,14 +86,14 @@ public final class GraphHopperManager {
             this.roadEdgeIndex = newRoadIndex;
             this.failureReason = null;
             state.set(GraphState.READY);
-            LOGGER.info("Road edge index ready indexedEdges={}", newRoadIndex.indexedEdgeCount());
+            LOGGER.info("道路边索引准备完成 索引边数={}", newRoadIndex.indexedEdgeCount());
         } catch (Exception exception) {
             candidate.close();
             this.failureReason = exception.getMessage();
             state.set(GraphState.FAILED);
-            LOGGER.error("Graph initialization failed type={} message={}",
+            LOGGER.error("路网初始化失败 异常类型={} 错误信息={}",
                     exception.getClass().getName(), exception.getMessage());
-            throw new IllegalStateException("graph initialization failed", exception);
+            throw new IllegalStateException("路网初始化失败", exception);
         }
     }
 
@@ -112,7 +112,7 @@ public final class GraphHopperManager {
     public HardAvoidingGraphHopper requireHopper() {
         HardAvoidingGraphHopper value = hopper;
         if (!isReady() || value == null) {
-            throw new IllegalStateException("routing graph is not ready");
+            throw new IllegalStateException("路网尚未就绪");
         }
         return value;
     }
@@ -120,14 +120,14 @@ public final class GraphHopperManager {
     public RoadEdgeIndex requireRoadEdgeIndex() {
         RoadEdgeIndex value = roadEdgeIndex;
         if (!isReady() || value == null) {
-            throw new IllegalStateException("road edge index is not ready");
+            throw new IllegalStateException("道路边索引尚未就绪");
         }
         return value;
     }
 
     public String requireGraphFingerprint() {
         if (!isReady() || graphFingerprint == null) {
-            throw new IllegalStateException("graph fingerprint is not ready");
+            throw new IllegalStateException("路网指纹尚未就绪");
         }
         return graphFingerprint;
     }
@@ -149,16 +149,16 @@ public final class GraphHopperManager {
         Path metadata = cache.resolve(SOURCE_HASH_FILE);
         if (!Files.isRegularFile(metadata)) {
             throw new IllegalStateException(
-                    "existing graph cache lacks camera-safe source metadata; use a new empty cache directory");
+                    "现有路网缓存缺少源文件元数据，请使用新的空缓存目录");
         }
         String cachedHash = Files.readString(metadata, StandardCharsets.US_ASCII).trim();
         if (!cachedHash.matches("[0-9a-fA-F]{64}")) {
-            throw new IllegalStateException("graph cache source metadata is invalid");
+            throw new IllegalStateException("路网缓存的源文件元数据无效");
         }
         if (Files.isRegularFile(pbf)) {
             String currentHash = Hashing.sha256(pbf);
             if (!cachedHash.equalsIgnoreCase(currentHash)) {
-                throw new IllegalStateException("configured PBF does not match the existing graph cache");
+                throw new IllegalStateException("配置的 PBF 与现有路网缓存不匹配");
             }
         }
         return cachedHash.toLowerCase();
@@ -173,7 +173,7 @@ public final class GraphHopperManager {
             Files.move(temporary, target,
                     StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException exception) {
-            throw new IOException("graph cache filesystem does not support atomic metadata publication", exception);
+            throw new IOException("路网缓存所在文件系统不支持原子发布元数据", exception);
         } finally {
             Files.deleteIfExists(temporary);
         }

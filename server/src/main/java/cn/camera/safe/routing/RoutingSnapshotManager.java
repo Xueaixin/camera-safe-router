@@ -46,9 +46,9 @@ public final class RoutingSnapshotManager {
             return operation.run();
         } catch (IOException | RuntimeException exception) {
             lastFailure = exception.getMessage();
-            LOGGER.error("Routing snapshot refresh failed type={} message={}; previous snapshot retained={}",
+            LOGGER.error("路由快照刷新失败 异常类型={} 错误信息={} 已保留旧快照={}",
                     exception.getClass().getName(), exception.getMessage(), current.get() != null);
-            throw new SnapshotBuildException("routing snapshot refresh failed", exception);
+            throw new SnapshotBuildException("路由快照刷新失败", exception);
         } finally {
             refreshLock.unlock();
         }
@@ -61,8 +61,8 @@ public final class RoutingSnapshotManager {
         sourceActivation.activate();
         current.set(candidate);
         lastFailure = null;
-        LOGGER.info("Published routing snapshot sourceCameras={} retainedCameras={} "
-                        + "outsideSixRing={} unrecognizedIsSixRingOut={} blockedEdges={} matched={} unmatched={}",
+        LOGGER.info("路由快照发布完成 源摄像头数={} 保留摄像头数={} "
+                        + "六环外排除数={} 无法识别IsSixRingOut数={} 禁行边数={} 匹配数={} 未匹配数={}",
                 candidate.cameraSnapshot().sourceRecordCount(),
                 candidate.cameraSnapshot().retainedRecordCount(),
                 candidate.cameraSnapshot().outsideSixRingRecordCount(),
@@ -73,7 +73,7 @@ public final class RoutingSnapshotManager {
         try {
             store.prune();
         } catch (IOException exception) {
-            LOGGER.warn("Routing snapshot retention cleanup failed message={}", exception.getMessage());
+            LOGGER.warn("路由快照历史清理失败 错误信息={}", exception.getMessage());
         }
         return candidate;
     }
@@ -96,7 +96,7 @@ public final class RoutingSnapshotManager {
 
     public static final class RefreshAlreadyRunningException extends RuntimeException {
         public RefreshAlreadyRunningException() {
-            super("camera snapshot refresh is already running");
+            super("摄像头快照刷新正在执行");
         }
     }
 

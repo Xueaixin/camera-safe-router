@@ -44,7 +44,7 @@ public final class CameraUpdateFileStore {
         Path current = currentSource();
         Path parent = current.getParent();
         if (parent == null) {
-            throw new IOException("camera source path must have a parent directory");
+            throw new IOException("摄像头源文件路径必须包含父目录");
         }
         Files.createDirectories(parent);
         Path prepared = Files.createTempFile(parent, ".camera-update-", ".tmp");
@@ -60,7 +60,7 @@ public final class CameraUpdateFileStore {
     public void activate(Path preparedSource) throws IOException {
         Path current = currentSource();
         if (!preparedSource.toAbsolutePath().normalize().getParent().equals(current.getParent())) {
-            throw new IOException("prepared camera source is not on the publication filesystem");
+            throw new IOException("摄像头发布准备文件与正式文件不在同一文件系统");
         }
         backupCurrent(current);
         moveAtomically(preparedSource, current);
@@ -161,7 +161,7 @@ public final class CameraUpdateFileStore {
             Files.move(source, target,
                     StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException exception) {
-            throw new IOException("camera data filesystem does not support atomic publication", exception);
+            throw new IOException("摄像头数据所在文件系统不支持原子发布", exception);
         }
     }
 

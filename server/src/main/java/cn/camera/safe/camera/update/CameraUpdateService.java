@@ -51,25 +51,25 @@ public final class CameraUpdateService {
     public CameraUpdateResult updateNow() {
         String updateId = UUID.randomUUID().toString();
         long updateStarted = System.nanoTime();
-        LOGGER.info("Camera data update requested updateId={}", updateId);
+        LOGGER.info("收到摄像头数据更新请求 更新ID={}", updateId);
         if (!graphManager.isReady()) {
-            LOGGER.warn("Camera data update rejected updateId={} reason=routing_graph_not_ready",
+            LOGGER.warn("摄像头数据更新被拒绝 更新ID={} 原因=路网未就绪",
                     updateId);
             throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE,
                     ErrorCode.ROUTING_NOT_READY, "路网尚未就绪");
         }
         if (!running.compareAndSet(false, true)) {
-            LOGGER.warn("Camera data update rejected updateId={} reason=update_already_running",
+            LOGGER.warn("摄像头数据更新被拒绝 更新ID={} 原因=已有更新正在执行",
                     updateId);
             throw new BusinessException(HttpStatus.CONFLICT,
                     ErrorCode.CAMERA_UPDATE_ALREADY_RUNNING, "摄像头数据更新正在进行");
         }
-        LOGGER.info("Camera data update started updateId={}", updateId);
+        LOGGER.info("摄像头数据更新开始 更新ID={}", updateId);
         try {
             return performUpdate(updateId, updateStarted);
         } catch (RoutingSnapshotManager.RefreshAlreadyRunningException exception) {
-            LOGGER.warn("Camera data update rejected updateId={} reason=snapshot_refresh_already_running "
-                            + "elapsedMs={}",
+            LOGGER.warn("摄像头数据更新被拒绝 更新ID={} 原因=快照刷新正在执行 "
+                            + "总耗时毫秒={}",
                     updateId, elapsedMillis(updateStarted));
             throw new BusinessException(HttpStatus.CONFLICT,
                     ErrorCode.CAMERA_UPDATE_ALREADY_RUNNING, "摄像头快照刷新正在进行");
@@ -90,29 +90,29 @@ public final class CameraUpdateService {
     private CameraUpdateResult performUpdate(String updateId, long updateStarted)
             throws IOException, InterruptedException {
         long phaseStarted = System.nanoTime();
-        LOGGER.info("Camera data update phase started updateId={} phase=download maxBytes={}",
+        LOGGER.info("摄像头数据更新阶段开始 更新ID={} 阶段=下载 最大字节数={}",
                 updateId, properties.cameras().update().maxDownloadBytes());
         DownloadedCameraSource downloaded = sourceClient.download();
-        LOGGER.info("Camera data update phase completed updateId={} phase=download bytes={} "
-                        + "sourceSha256={} elapsedMs={}",
+        LOGGER.info("摄像头数据更新阶段完成 更新ID={} 阶段=下载 字节数={} "
+                        + "源SHA256={} 耗时毫秒={}",
                 updateId, downloaded.content().length, downloaded.sha256(),
                 elapsedMillis(phaseStarted));
 
         phaseStarted = System.nanoTime();
-        LOGGER.info("Camera data update phase started updateId={} phase=change_detection", updateId);
+        LOGGER.info("摄像头数据更新阶段开始 更新ID={} 阶段=变更检测", updateId);
         RoutingSnapshot previous = snapshotManager.current().orElse(null);
         String currentFileHash = fileStore.currentSha256().orElse(null);
         if (previous != null
                 && downloaded.sha256().equals(currentFileHash)
                 && downloaded.sha256().equals(previous.cameraSnapshot().sourceSha256())) {
-            LOGGER.info("Camera data update completed updateId={} status=NO_CHANGE sourceSha256={} "
-                            + "changeDetectionElapsedMs={} totalElapsedMs={}",
+            LOGGER.info("摄像头数据更新完成 更新ID={} 状态=无变化 源SHA256={} "
+                            + "变更检测耗时毫秒={} 总耗时毫秒={}",
                     updateId, downloaded.sha256(), elapsedMillis(phaseStarted),
                     elapsedMillis(updateStarted));
             return result(CameraUpdateStatus.NO_CHANGE, previous, previous.cameraSnapshot().sourceSha256());
         }
-        LOGGER.info("Camera data update phase completed updateId={} phase=change_detection "
-                        + "changed=true currentFileSha256={} currentSnapshotSha256={} elapsedMs={}",
+        LOGGER.info("摄像头数据更新阶段完成 更新ID={} 阶段=变更检测 "
+                        + "检测到变化=true 当前文件SHA256={} 当前快照SHA256={} 耗时毫秒={}",
                 updateId, currentFileHash,
                 previous == null ? null : previous.cameraSnapshot().sourceSha256(),
                 elapsedMillis(phaseStarted));
@@ -122,18 +122,18 @@ public final class CameraUpdateService {
         boolean published = false;
         try {
             phaseStarted = System.nanoTime();
-            LOGGER.info("Camera data update phase started updateId={} phase=stage_source", updateId);
+            LOGGER.info("摄像头数据更新阶段开始 更新ID={} 阶段=暂存源文件", updateId);
             staged = fileStore.stage(downloaded);
-            LOGGER.info("Camera data update phase completed updateId={} phase=stage_source path={} "
-                            + "elapsedMs={}",
+            LOGGER.info("摄像头数据更新阶段完成 更新ID={} 阶段=暂存源文件 路径={} "
+                            + "耗时毫秒={}",
                     updateId, staged, elapsedMillis(phaseStarted));
 
             phaseStarted = System.nanoTime();
-            LOGGER.info("Camera data update phase started updateId={} phase=build_snapshot", updateId);
+            LOGGER.info("摄像头数据更新阶段开始 更新ID={} 阶段=构建路由快照", updateId);
             RoutingSnapshot candidate = snapshotBuilder.build(staged);
-            LOGGER.info("Camera data update phase completed updateId={} phase=build_snapshot "
-                            + "sourceRecords={} retainedRecords={} matchedCameras={} "
-                            + "unmatchedCameras={} blockedEdges={} elapsedMs={}",
+            LOGGER.info("摄像头数据更新阶段完成 更新ID={} 阶段=构建路由快照 "
+                            + "源记录数={} 保留记录数={} 匹配摄像头数={} "
+                            + "未匹配摄像头数={} 禁行边数={} 耗时毫秒={}",
                     updateId,
                     candidate.cameraSnapshot().sourceRecordCount(),
                     candidate.cameraSnapshot().retainedRecordCount(),
@@ -143,43 +143,43 @@ public final class CameraUpdateService {
                     elapsedMillis(phaseStarted));
 
             phaseStarted = System.nanoTime();
-            LOGGER.info("Camera data update phase started updateId={} phase=validate_candidate", updateId);
+            LOGGER.info("摄像头数据更新阶段开始 更新ID={} 阶段=校验候选", updateId);
             validateCandidate(candidate, previous);
-            LOGGER.info("Camera data update phase completed updateId={} phase=validate_candidate "
-                            + "elapsedMs={}",
+            LOGGER.info("摄像头数据更新阶段完成 更新ID={} 阶段=校验候选 "
+                            + "耗时毫秒={}",
                     updateId, elapsedMillis(phaseStarted));
 
             phaseStarted = System.nanoTime();
-            LOGGER.info("Camera data update phase started updateId={} phase=publish", updateId);
+            LOGGER.info("摄像头数据更新阶段开始 更新ID={} 阶段=发布", updateId);
             prepared = fileStore.prepareForPublication(staged);
             Path publicationFile = prepared;
             snapshotManager.publishCandidate(candidate, () -> fileStore.activate(publicationFile));
             published = true;
-            LOGGER.info("Camera data update phase completed updateId={} phase=publish sourcePath={} "
-                            + "elapsedMs={}",
+            LOGGER.info("摄像头数据更新阶段完成 更新ID={} 阶段=发布 源文件路径={} "
+                            + "耗时毫秒={}",
                     updateId, fileStore.currentSource(), elapsedMillis(phaseStarted));
 
             phaseStarted = System.nanoTime();
-            LOGGER.info("Camera data update phase started updateId={} phase=retention_cleanup", updateId);
+            LOGGER.info("摄像头数据更新阶段开始 更新ID={} 阶段=清理历史文件", updateId);
             try {
                 fileStore.cleanupAfterSuccess(staged);
-                LOGGER.info("Camera data update phase completed updateId={} phase=retention_cleanup "
-                                + "elapsedMs={}",
+                LOGGER.info("摄像头数据更新阶段完成 更新ID={} 阶段=清理历史文件 "
+                                + "耗时毫秒={}",
                         updateId, elapsedMillis(phaseStarted));
             } catch (IOException exception) {
-                LOGGER.warn("Camera data update phase failed updateId={} phase=retention_cleanup "
-                                + "message={} elapsedMs={}",
+                LOGGER.warn("摄像头数据更新阶段失败 更新ID={} 阶段=清理历史文件 "
+                                + "错误信息={} 耗时毫秒={}",
                         updateId, exception.getMessage(), elapsedMillis(phaseStarted), exception);
             }
             String previousHash = previous == null ? null : previous.cameraSnapshot().sourceSha256();
-            LOGGER.info("Camera data update completed updateId={} status=UPDATED sourceSha256={} "
-                            + "previousSourceSha256={} totalElapsedMs={}",
+            LOGGER.info("摄像头数据更新完成 更新ID={} 状态=已更新 源SHA256={} "
+                            + "上一版本源SHA256={} 总耗时毫秒={}",
                     updateId, downloaded.sha256(), previousHash, elapsedMillis(updateStarted));
             return result(CameraUpdateStatus.UPDATED, candidate, previousHash);
         } catch (IOException | RuntimeException exception) {
             if (!published) {
-                LOGGER.warn("Camera data update candidate cleanup started updateId={} stagedPath={} "
-                                + "preparedPath={}",
+                LOGGER.warn("摄像头数据更新候选清理开始 更新ID={} 暂存路径={} "
+                                + "发布准备路径={}",
                         updateId, staged, prepared);
                 cleanupFailedCandidate(staged, prepared);
             }
@@ -192,13 +192,13 @@ public final class CameraUpdateService {
         int sourceCount = candidate.cameraSnapshot().sourceRecordCount();
         if (sourceCount < update.minSourceRecordCount()) {
             throw new CameraUpdateRejectedException(
-                    "camera source record count is below the configured minimum: " + sourceCount);
+                    "摄像头源记录数低于配置的最小值: " + sourceCount);
         }
         double matchRate = (double) candidate.matchedCameraCount()
                 / candidate.cameraSnapshot().retainedRecordCount();
         if (matchRate < update.minMatchRate()) {
             throw new CameraUpdateRejectedException(
-                    "camera match rate is below the configured minimum: " + matchRate);
+                    "摄像头匹配率低于配置的最小值: " + matchRate);
         }
         if (previous == null) {
             return;
@@ -207,14 +207,14 @@ public final class CameraUpdateService {
         double sourceChange = ratioDifference(sourceCount, previousSourceCount);
         if (sourceChange > update.maxSourceCountChangeRatio()) {
             throw new CameraUpdateRejectedException(
-                    "camera source record count change exceeds the configured maximum: " + sourceChange);
+                    "摄像头源记录数变化率超过配置的最大值: " + sourceChange);
         }
         int blockedEdges = candidate.blockedEdges().blockedEdgeCount();
         int previousBlockedEdges = previous.blockedEdges().blockedEdgeCount();
         double blockedChange = ratioDifference(blockedEdges, previousBlockedEdges);
         if (blockedChange > update.maxBlockedEdgeChangeRatio()) {
             throw new CameraUpdateRejectedException(
-                    "blocked edge count change exceeds the configured maximum: " + blockedChange);
+                    "禁行边数量变化率超过配置的最大值: " + blockedChange);
         }
     }
 
@@ -222,12 +222,12 @@ public final class CameraUpdateService {
         try {
             fileStore.discard(prepared);
         } catch (IOException exception) {
-            LOGGER.warn("Could not delete prepared camera update file message={}", exception.getMessage());
+            LOGGER.warn("无法删除摄像头更新发布准备文件 错误信息={}", exception.getMessage());
         }
         try {
             fileStore.quarantine(staged);
         } catch (IOException exception) {
-            LOGGER.warn("Could not quarantine failed camera update file message={}", exception.getMessage());
+            LOGGER.warn("无法隔离失败的摄像头更新文件 错误信息={}", exception.getMessage());
         }
     }
 
@@ -261,7 +261,7 @@ public final class CameraUpdateService {
             Exception cause,
             String updateId,
             long updateStarted) {
-        LOGGER.error("{} updateId={} type={} message={} totalElapsedMs={}",
+        LOGGER.error("{} 更新ID={} 异常类型={} 错误信息={} 总耗时毫秒={}",
                 message, updateId, cause.getClass().getName(), cause.getMessage(),
                 elapsedMillis(updateStarted), cause);
         return new BusinessException(

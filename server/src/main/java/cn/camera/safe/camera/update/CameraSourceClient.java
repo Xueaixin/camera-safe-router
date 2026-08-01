@@ -37,20 +37,20 @@ public final class CameraSourceClient {
                 request, HttpResponse.BodyHandlers.ofInputStream());
         try (InputStream body = response.body()) {
             if (response.statusCode() != 200) {
-                throw new IOException("camera source returned HTTP " + response.statusCode());
+                throw new IOException("摄像头数据源返回 HTTP " + response.statusCode());
             }
             String contentType = response.headers().firstValue("Content-Type").orElse("")
                     .toLowerCase(Locale.ROOT);
             if (!contentType.startsWith("application/json")) {
-                throw new IOException("camera source returned unexpected Content-Type: " + contentType);
+                throw new IOException("摄像头数据源返回了非预期的 Content-Type: " + contentType);
             }
             long declaredLength = response.headers().firstValueAsLong("Content-Length").orElse(-1);
             if (declaredLength > properties.maxDownloadBytes()) {
-                throw new IOException("camera source response exceeds the configured size limit");
+                throw new IOException("摄像头数据源响应超过配置的大小上限");
             }
             byte[] content = readLimited(body, properties.maxDownloadBytes());
             if (content.length == 0) {
-                throw new IOException("camera source returned an empty response");
+                throw new IOException("摄像头数据源返回了空响应");
             }
             return new DownloadedCameraSource(content, Hashing.sha256(content));
         }
@@ -64,7 +64,7 @@ public final class CameraSourceClient {
         while ((read = input.read(buffer)) != -1) {
             total += read;
             if (total > maxBytes) {
-                throw new IOException("camera source response exceeds the configured size limit");
+                throw new IOException("摄像头数据源响应超过配置的大小上限");
             }
             output.write(buffer, 0, read);
         }

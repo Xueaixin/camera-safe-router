@@ -73,7 +73,7 @@ public final class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiError> handleUnexpected(Exception exception, HttpServletRequest request) {
         String requestId = requestId(request);
-        LOGGER.error("Unhandled request failure requestId={} type={}",
+        LOGGER.error("请求发生未处理异常 请求ID={} 异常类型={}",
                 requestId, exception.getClass().getName(), exception);
         return new ResponseEntity<>(new ApiError(
                 ErrorCode.INTERNAL_ERROR,

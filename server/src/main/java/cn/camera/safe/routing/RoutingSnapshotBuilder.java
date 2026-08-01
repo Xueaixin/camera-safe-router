@@ -35,10 +35,10 @@ public final class RoutingSnapshotBuilder {
     public RoutingSnapshot build(Path cameraPath) {
         if (!properties.cameras().sourceCoordinateVerified()) {
             throw new SnapshotBuildException(
-                    "camera source coordinate system has not been manually verified");
+                    "摄像头源坐标系尚未完成人工确认");
         }
         if (!graphManager.isReady()) {
-            throw new SnapshotBuildException("routing graph is not ready");
+            throw new SnapshotBuildException("路网尚未就绪");
         }
         try {
             CameraLoadResult loaded = cameraLoader.load(cameraPath);
@@ -46,12 +46,12 @@ public final class RoutingSnapshotBuilder {
                 String firstIssue = loaded.issues().isEmpty()
                         ? "no records"
                         : loaded.issues().getFirst().reason();
-                throw new SnapshotBuildException("camera JSON validation failed: valid="
-                        + loaded.cameras().size() + " retained=" + loaded.retainedRecordCount()
-                        + " source=" + loaded.sourceRecordCount()
-                        + " outsideSixRing=" + loaded.outsideSixRingRecordCount()
-                        + " unrecognizedIsSixRingOut=" + loaded.unrecognizedSixRingOutRecordCount()
-                        + " issues=" + loaded.issues().size() + " firstIssue=" + firstIssue);
+                throw new SnapshotBuildException("摄像头 JSON 校验失败: 有效数="
+                        + loaded.cameras().size() + " 保留数=" + loaded.retainedRecordCount()
+                        + " 源记录数=" + loaded.sourceRecordCount()
+                        + " 六环外排除数=" + loaded.outsideSixRingRecordCount()
+                        + " 无法识别IsSixRingOut数=" + loaded.unrecognizedSixRingOutRecordCount()
+                        + " 问题数=" + loaded.issues().size() + " 首个问题=" + firstIssue);
             }
             CameraSnapshot cameraSnapshot = CameraSnapshot.from(loaded);
             CameraSpatialIndex cameraIndex = new CameraSpatialIndex(cameraSnapshot.cameras());
@@ -68,7 +68,7 @@ public final class RoutingSnapshotBuilder {
                     blocked.matchedCameraCount(),
                     blocked.unmatchedCameraIds());
         } catch (IOException | IllegalArgumentException exception) {
-            throw new SnapshotBuildException("camera snapshot build failed", exception);
+            throw new SnapshotBuildException("摄像头快照构建失败", exception);
         }
     }
 }

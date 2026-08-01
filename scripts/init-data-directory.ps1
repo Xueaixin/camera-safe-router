@@ -24,7 +24,8 @@ $directories = @(
     (Join-Path $resolvedDataRoot 'snapshots'),
     (Join-Path $resolvedDataRoot 'downloads\cameras'),
     (Join-Path $resolvedDataRoot 'work\cameras\failed'),
-    (Join-Path $resolvedDataRoot 'backups\cameras')
+    (Join-Path $resolvedDataRoot 'backups\cameras'),
+    (Join-Path $resolvedDataRoot 'logs\archive')
 )
 
 foreach ($directory in $directories) {
@@ -38,4 +39,5 @@ foreach ($directory in $directories) {
     CameraBackups = Join-Path $resolvedDataRoot 'backups\cameras'
     GraphCache = Join-Path $resolvedDataRoot 'graph-cache\beijing'
     Snapshots = Join-Path $resolvedDataRoot 'snapshots'
+    LogFile = Join-Path $resolvedDataRoot 'logs\camera-safe-routing-server.log'
 } | Format-List

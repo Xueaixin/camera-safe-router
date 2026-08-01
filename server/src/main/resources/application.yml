@@ -52,6 +52,18 @@ app:
     local-only: ${ADMIN_LOCAL_ONLY:true}
 
 logging:
+  file:
+    name: ${APP_LOG_FILE:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/logs/camera-safe-routing-server.log}
+  charset:
+    console: UTF-8
+    file: UTF-8
   level:
     root: INFO
     cn.camera.safe: INFO
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${APP_LOG_ARCHIVE_PATTERN:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/logs/archive/camera-safe-routing-server.%d{yyyy-MM-dd}.%i.log.gz}
+      max-file-size: ${APP_LOG_MAX_FILE_SIZE:50MB}
+      max-history: ${APP_LOG_MAX_HISTORY:30}
+      total-size-cap: ${APP_LOG_TOTAL_SIZE_CAP:2GB}
+      clean-history-on-start: ${APP_LOG_CLEAN_HISTORY_ON_START:true}

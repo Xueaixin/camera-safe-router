@@ -36,7 +36,7 @@ public final class BackendInitializer {
                 graphManager.initialize();
                 snapshotManager.refreshNow();
             } catch (RuntimeException exception) {
-                LOGGER.error("Backend initialization incomplete type={} message={}",
+                LOGGER.error("后端初始化未完成 异常类型={} 错误信息={}",
                         exception.getClass().getName(), exception.getMessage());
             }
         });

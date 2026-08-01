@@ -29,13 +29,13 @@ public final class CameraUpdateScheduler {
         }
         try {
             CameraUpdateResult result = updateService.updateNow();
-            LOGGER.info("Scheduled camera update completed status={} sourceSha256={}",
+            LOGGER.info("定时摄像头数据更新完成 状态={} 源SHA256={}",
                     result.status(), result.sourceSha256());
         } catch (BusinessException exception) {
-            LOGGER.error("Scheduled camera update failed code={} message={}",
+            LOGGER.error("定时摄像头数据更新失败 错误码={} 错误信息={}",
                     exception.code(), exception.getMessage());
         } catch (RuntimeException exception) {
-            LOGGER.error("Scheduled camera update failed type={} message={}",
+            LOGGER.error("定时摄像头数据更新失败 异常类型={} 错误信息={}",
                     exception.getClass().getName(), exception.getMessage(), exception);
         }
     }

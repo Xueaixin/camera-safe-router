@@ -47,7 +47,7 @@ public final class GraphHopperRoutingEngine implements RoutingEngine {
             throw new RoutingEngineException(
                     pointNotFound ? RoutingEngineException.Reason.POINT_NOT_FOUND
                             : RoutingEngineException.Reason.NO_ROUTE,
-                    pointNotFound ? "route point could not be snapped" : "no route was found");
+                    pointNotFound ? "路线点无法吸附到路网" : "未找到可用路线");
         }
 
         ResponsePath best = response.getBest();
@@ -58,7 +58,7 @@ public final class GraphHopperRoutingEngine implements RoutingEngine {
                 .toList();
         if (geometry.size() < 2) {
             throw new RoutingEngineException(RoutingEngineException.Reason.NO_ROUTE,
-                    "route geometry was empty");
+                    "路线几何为空");
         }
         return new EngineRoute(
                 best.getDistance(),
@@ -74,14 +74,14 @@ public final class GraphHopperRoutingEngine implements RoutingEngine {
             BlockedEdgeSnapshot blockedEdges) {
         List<PathDetail> details = path.getPathDetails().get(EDGE_KEY);
         if (details == null) {
-            throw new IllegalStateException("GraphHopper did not return edge_key path details");
+            throw new IllegalStateException("GraphHopper 未返回 edge_key 路径明细");
         }
         boolean violation = details.stream()
                 .map(PathDetail::getValue)
                 .map(Integer.class::cast)
                 .anyMatch(blockedEdges::isBlockedEdgeKey);
         if (violation) {
-            throw new IllegalStateException("GraphHopper returned a path containing a blocked edge");
+            throw new IllegalStateException("GraphHopper 返回的路线包含禁行边");
         }
     }
 }

@@ -66,7 +66,7 @@ class CameraSourceClientTest {
 
         assertThatThrownBy(client::download)
                 .isInstanceOf(IOException.class)
-                .hasMessageContaining("size limit");
+                .hasMessageContaining("大小上限");
     }
 
     @Test

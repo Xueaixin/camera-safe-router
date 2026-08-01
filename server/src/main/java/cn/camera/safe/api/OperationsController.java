@@ -82,7 +82,7 @@ public final class OperationsController {
     @PostMapping("/admin/camera-data/update")
     public CameraUpdateResult updateCameraData(HttpServletRequest request) {
         adminAccessGuard.requireLocal(request);
-        LOGGER.info("Manual camera data update request accepted remoteAddress={}",
+        LOGGER.info("已接受手动摄像头数据更新请求 远程地址={}",
                 request.getRemoteAddr());
         return updateService.updateNow();
     }
