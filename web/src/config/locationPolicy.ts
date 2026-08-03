@@ -1,6 +1,6 @@
 export const LOCATION_POLICY = Object.freeze({
   maximumAgeMs: 30_000,
-  maximumAccuracyMeters: 100,
+  maximumAccuracyMeters: 150,
   mapUpdateThrottleMs: 750,
   watchOptions: {
     enableHighAccuracy: true,

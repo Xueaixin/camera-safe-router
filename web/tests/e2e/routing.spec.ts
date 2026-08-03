@@ -46,7 +46,8 @@ test('allowed geolocation renders a display location and centers only on command
   await enableLocation(page, context);
   await page.getByTestId('location-button').click();
   await expect(page.getByTestId('map-container')).toHaveAttribute('data-centered', 'current');
-  await page.getByRole('button', { name: '使用当前位置' }).click();
+  await page.getByRole('combobox', { name: '搜索起点' }).click();
+  await page.getByTestId('use-current-option').click();
   await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue('当前位置');
 });
 
@@ -94,16 +95,54 @@ test('camera layer can be hidden and restored without per-point Vue components',
   await expect(page.getByTestId('map-container')).toHaveAttribute('data-camera-count', /[1-9]/);
 });
 
-test('map click selection writes an explicitly GCJ02-backed endpoint', async ({ page }) => {
+test('camera click shows one point popup with coordinates', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '在地图上选择搜索起点' }).click();
+  const canvas = page.locator('.mock-map__canvas');
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  await canvas.click({
+    position: {
+      x: (box?.width ?? 1) * ((116.42 - 116.25) / (116.55 - 116.25)),
+      y: (box?.height ?? 1) * ((40.04 - 39.93) / (40.04 - 39.82)),
+    },
+  });
+
+  const popup = page.getByTestId('camera-popup');
+  await expect(popup).toBeVisible();
+  await expect(popup).toContainText('坐标：116.420000, 39.930000');
+  await expect(page.getByTestId('camera-detail')).toHaveCount(0);
+});
+
+test('map point waits for an explicit start or end choice', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('start-map-pick')).toHaveCount(0);
+  await expect(page.getByTestId('end-map-pick')).toHaveCount(0);
   const canvas = page.locator('.mock-map__canvas');
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
   await canvas.click({
     position: { x: 28, y: Math.min(420, Math.max(40, (box?.height ?? 500) - 180)) },
   });
+
+  await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue('');
+  const popup = page.getByTestId('map-point-popup');
+  await expect(popup).toBeVisible();
+  await expect(popup).toContainText(/坐标：\d+\.\d{6}, \d+\.\d{6}/);
+  await expect(page.getByTestId('set-start-from-map')).toBeVisible();
+  await expect(page.getByTestId('set-end-from-map')).toBeVisible();
+
+  await page.getByTestId('set-start-from-map').click();
   await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue(/地图选点/);
+  await expect(popup).toHaveCount(0);
+});
+
+test('mobile route sheet handle does not render a chevron', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+
+  const handle = page.locator('.route-sheet__handle');
+  await expect(handle).toBeVisible();
+  await expect(handle.locator('svg')).toHaveCount(0);
 });
 
 test('primary overlays stay within the viewport without incoherent overlap', async ({ page }) => {
@@ -122,6 +161,15 @@ test('primary overlays stay within the viewport without incoherent overlap', asy
       const search = document.querySelector('.search-panel')?.getBoundingClientRect();
       const toolbar = document.querySelector('.map-toolbar')?.getBoundingClientRect();
       const sheet = document.querySelector('.route-sheet')?.getBoundingClientRect();
+      const swap = document
+        .querySelector('[data-testid="swap-endpoints"]')
+        ?.getBoundingClientRect();
+      const startField = document
+        .querySelector('.place-input--start .place-input__field')
+        ?.getBoundingClientRect();
+      const endField = document
+        .querySelector('.place-input--end .place-input__field')
+        ?.getBoundingClientRect();
       const intersects = (a?: DOMRect, b?: DOMRect) =>
         Boolean(
           a && b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top,
@@ -130,6 +178,7 @@ test('primary overlays stay within the viewport without incoherent overlap', asy
         horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
         searchToolbarOverlap: intersects(search, toolbar),
         toolbarSheetOverlap: intersects(toolbar, sheet),
+        swapActionOverlap: intersects(swap, startField) || intersects(swap, endField),
         sheetInside: Boolean(
           sheet &&
           sheet.left >= 0 &&
@@ -142,6 +191,7 @@ test('primary overlays stay within the viewport without incoherent overlap', asy
       horizontalOverflow: false,
       searchToolbarOverlap: false,
       toolbarSheetOverlap: false,
+      swapActionOverlap: false,
       sheetInside: true,
     });
   }

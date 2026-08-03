@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { Crosshair, MapPin, Navigation, X } from '@lucide/vue';
+import { MapPin, Navigation, X } from '@lucide/vue';
 
 import type { SelectedPlace } from '@/types/coordinate';
 import type { PlaceSuggestion } from '@/types/map';
@@ -17,7 +17,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [place: SelectedPlace];
   clear: [];
-  mapPick: [];
   useCurrent: [];
 }>();
 
@@ -25,8 +24,18 @@ const query = ref(props.place?.name ?? '');
 const suggestions = ref<PlaceSuggestion[]>([]);
 const searchState = ref<'idle' | 'loading' | 'error'>('idle');
 const activeIndex = ref(-1);
-const isOpen = computed(() => suggestions.value.length > 0 || searchState.value === 'error');
+const input = ref<HTMLInputElement | null>(null);
+const isFocused = ref(false);
+const currentOptionOffset = computed(() => (props.allowCurrent ? 1 : 0));
+const optionCount = computed(() => suggestions.value.length + currentOptionOffset.value);
+const isOpen = computed(
+  () =>
+    (Boolean(props.allowCurrent) && isFocused.value) ||
+    suggestions.value.length > 0 ||
+    searchState.value === 'error',
+);
 let timer: number | null = null;
+let closeTimer: number | null = null;
 let controller: AbortController | null = null;
 
 watch(
@@ -65,8 +74,7 @@ async function search(keyword: string) {
 
 function choose(suggestion: PlaceSuggestion) {
   query.value = suggestion.name;
-  suggestions.value = [];
-  activeIndex.value = -1;
+  closeDropdown();
   emit('select', {
     name: suggestion.name,
     coordinate: suggestion.coordinate,
@@ -81,32 +89,60 @@ function clear() {
   emit('clear');
 }
 
+function chooseCurrent() {
+  closeDropdown();
+  emit('useCurrent');
+}
+
 function handleKeydown(event: KeyboardEvent) {
-  if (!suggestions.value.length) return;
-  if (event.key === 'ArrowDown') {
+  if (event.key === 'Escape' && isOpen.value) {
     event.preventDefault();
-    activeIndex.value = (activeIndex.value + 1) % suggestions.value.length;
-  } else if (event.key === 'ArrowUp') {
+    closeDropdown();
+  } else if (event.key === 'ArrowDown' && optionCount.value > 0) {
     event.preventDefault();
-    activeIndex.value =
-      (activeIndex.value - 1 + suggestions.value.length) % suggestions.value.length;
+    activeIndex.value = (activeIndex.value + 1) % optionCount.value;
+  } else if (event.key === 'ArrowUp' && optionCount.value > 0) {
+    event.preventDefault();
+    activeIndex.value = (activeIndex.value - 1 + optionCount.value) % optionCount.value;
   } else if (event.key === 'Enter' && activeIndex.value >= 0) {
     event.preventDefault();
-    const suggestion = suggestions.value[activeIndex.value];
+    if (props.allowCurrent && activeIndex.value === 0) {
+      chooseCurrent();
+      return;
+    }
+    const suggestion = suggestions.value[activeIndex.value - currentOptionOffset.value];
     if (suggestion) choose(suggestion);
-  } else if (event.key === 'Escape') {
-    suggestions.value = [];
   }
 }
 
+function handleFocus() {
+  if (closeTimer !== null) window.clearTimeout(closeTimer);
+  isFocused.value = true;
+}
+
+function closeDropdown() {
+  if (timer !== null) window.clearTimeout(timer);
+  if (closeTimer !== null) window.clearTimeout(closeTimer);
+  timer = null;
+  closeTimer = null;
+  controller?.abort();
+  controller = null;
+  suggestions.value = [];
+  searchState.value = 'idle';
+  activeIndex.value = -1;
+  isFocused.value = false;
+  input.value?.blur();
+}
+
 function delayedClose() {
-  window.setTimeout(() => {
-    suggestions.value = [];
+  closeTimer = window.setTimeout(() => {
+    closeDropdown();
   }, 160);
 }
 
 onBeforeUnmount(() => {
   if (timer !== null) window.clearTimeout(timer);
+  if (closeTimer !== null) window.clearTimeout(closeTimer);
   controller?.abort();
 });
 </script>
@@ -121,6 +157,7 @@ onBeforeUnmount(() => {
       </span>
       <input
         :id="id"
+        ref="input"
         v-model="query"
         :placeholder="label"
         :aria-expanded="isOpen"
@@ -129,6 +166,7 @@ onBeforeUnmount(() => {
         autocomplete="off"
         role="combobox"
         @input="handleInput"
+        @focus="handleFocus"
         @keydown="handleKeydown"
         @blur="delayedClose"
       />
@@ -143,22 +181,6 @@ onBeforeUnmount(() => {
       >
         <X :size="16" aria-hidden="true" />
       </button>
-      <button
-        class="icon-button icon-button--small"
-        type="button"
-        :aria-label="`在地图上选择${label}`"
-        :title="`地图选择${label}`"
-        @click="$emit('mapPick')"
-      >
-        <Crosshair :size="17" aria-hidden="true" />
-      </button>
-    </div>
-
-    <div v-if="allowCurrent" class="place-input__quick-actions">
-      <button type="button" class="text-action" @click="$emit('useCurrent')">
-        <Navigation :size="14" aria-hidden="true" />
-        使用当前位置
-      </button>
     </div>
 
     <div
@@ -168,17 +190,34 @@ onBeforeUnmount(() => {
       role="listbox"
       :aria-label="`${label}搜索结果`"
     >
+      <button
+        v-if="allowCurrent"
+        :id="`${id}-option-0`"
+        type="button"
+        role="option"
+        :aria-selected="activeIndex === 0"
+        :class="[
+          'suggestions__item',
+          'suggestions__item--current',
+          { 'is-active': activeIndex === 0 },
+        ]"
+        data-testid="use-current-option"
+        @click="chooseCurrent"
+      >
+        <Navigation :size="16" aria-hidden="true" />
+        <span><strong>使用当前位置</strong></span>
+      </button>
       <p v-if="searchState === 'error'" class="suggestions__state" role="alert">
         地址搜索失败，请检查地图连接后重试。
       </p>
       <button
         v-for="(suggestion, index) in suggestions"
-        :id="`${id}-option-${index}`"
+        :id="`${id}-option-${index + currentOptionOffset}`"
         :key="suggestion.id"
         type="button"
         role="option"
-        :aria-selected="index === activeIndex"
-        :class="['suggestions__item', { 'is-active': index === activeIndex }]"
+        :aria-selected="index + currentOptionOffset === activeIndex"
+        :class="['suggestions__item', { 'is-active': index + currentOptionOffset === activeIndex }]"
         @mousedown.prevent="choose(suggestion)"
       >
         <MapPin :size="16" aria-hidden="true" />

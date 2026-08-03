@@ -2,7 +2,6 @@
 import { ArrowUpDown, Route } from '@lucide/vue';
 
 import PlaceInput from './PlaceInput.vue';
-import { useMapStore } from '@/stores/mapStore';
 import { useRouteStore } from '@/stores/routeStore';
 import type { SelectedPlace } from '@/types/coordinate';
 import type { PlaceSuggestion } from '@/types/map';
@@ -13,7 +12,6 @@ defineProps<{
 
 const emit = defineEmits<{ useCurrent: [] }>();
 const routeStore = useRouteStore();
-const mapStore = useMapStore();
 
 function selectStart(place: SelectedPlace) {
   routeStore.setStart(place);
@@ -36,7 +34,6 @@ function selectEnd(place: SelectedPlace) {
         allow-current
         @select="selectStart"
         @clear="routeStore.setStart(null)"
-        @map-pick="mapStore.beginSelection('start')"
         @use-current="emit('useCurrent')"
       />
 
@@ -45,6 +42,7 @@ function selectEnd(place: SelectedPlace) {
         type="button"
         aria-label="交换起点和终点"
         title="交换起终点"
+        data-testid="swap-endpoints"
         :disabled="!routeStore.start && !routeStore.end"
         @click="routeStore.swapEndpoints"
       >
@@ -59,13 +57,7 @@ function selectEnd(place: SelectedPlace) {
         :search-places="searchPlaces"
         @select="selectEnd"
         @clear="routeStore.setEnd(null)"
-        @map-pick="mapStore.beginSelection('end')"
       />
-    </div>
-
-    <div v-if="mapStore.selectionTarget" class="selection-notice" role="status">
-      请在地图上选择{{ mapStore.selectionTarget === 'start' ? '起点' : '终点' }}
-      <button type="button" class="text-action" @click="mapStore.finishSelection">取消</button>
     </div>
 
     <button

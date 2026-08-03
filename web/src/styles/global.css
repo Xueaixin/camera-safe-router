@@ -301,23 +301,33 @@ a:focus-visible {
 }
 
 .endpoint-fields {
-  position: relative;
   display: grid;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  column-gap: 8px;
+  row-gap: 8px;
 }
 
 .endpoint-fields__swap {
-  position: absolute;
-  top: 34px;
-  right: 7px;
-  z-index: 3;
-  width: 32px;
-  height: 32px;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: center;
+  justify-self: center;
+  width: 36px;
+  height: 36px;
   box-shadow: 0 1px 4px rgba(24, 33, 47, 0.1);
 }
 
 .place-input {
   position: relative;
+  grid-column: 1;
+}
+
+.place-input--start {
+  grid-row: 1;
+}
+
+.place-input--end {
+  grid-row: 2;
 }
 
 .place-input__field {
@@ -367,13 +377,6 @@ a:focus-visible {
   color: #7b8492;
 }
 
-.place-input__quick-actions {
-  display: flex;
-  min-height: 30px;
-  align-items: center;
-  padding-left: 32px;
-}
-
 .suggestions {
   position: absolute;
   top: calc(100% + 4px);
@@ -408,6 +411,13 @@ a:focus-visible {
   background: var(--color-surface-muted);
 }
 
+.suggestions__item--current {
+  min-height: 42px;
+  color: var(--color-route);
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 4px 4px 0 0;
+}
+
 .suggestions__item > svg {
   flex: none;
   color: var(--color-route);
@@ -436,20 +446,6 @@ a:focus-visible {
   padding: 12px;
   color: var(--color-error);
   overflow-wrap: anywhere;
-}
-
-.selection-notice {
-  display: flex;
-  min-height: 34px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 8px;
-  padding: 2px 8px 2px 10px;
-  color: #764c0d;
-  background: #fff7e6;
-  border-left: 3px solid #d88a13;
-  border-radius: 3px;
 }
 
 .plan-button {
@@ -722,37 +718,21 @@ a:focus-visible {
   text-decoration: none;
 }
 
-.camera-detail {
-  position: absolute;
-  right: 76px;
-  bottom: 20px;
-  z-index: 14;
+.map-info-popup {
   display: grid;
-  width: min(300px, calc(100% - 100px));
   gap: 4px;
-  padding: 12px 36px 12px 12px;
-  background: var(--color-surface);
-  border-left: 3px solid var(--color-camera);
-  border-radius: 4px;
-  box-shadow: var(--shadow-panel);
+  padding: 4px;
+  color: var(--color-text);
 }
 
-.camera-detail span {
+.map-info-popup span {
   color: var(--color-text-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
 }
 
-.camera-detail__close {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 30px;
-  height: 30px;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  font-size: 20px;
+.map-info-popup__coordinate {
+  font-variant-numeric: tabular-nums;
 }
 
 .map-marker {
@@ -788,15 +768,54 @@ a:focus-visible {
 }
 
 .camera-popup {
-  display: grid;
-  min-width: 210px;
-  gap: 4px;
-  padding: 4px;
+  min-width: 230px;
 }
 
-.camera-popup span {
-  color: var(--color-text-muted);
-  font-size: 12px;
+.map-point-popup {
+  min-width: 260px;
+  max-width: 320px;
+}
+
+.map-point-popup__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.map-point-popup__action {
+  min-height: 36px;
+  padding: 0 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.map-point-popup__action--start {
+  color: #17814e;
+  border-color: #83bda0;
+}
+
+.map-point-popup__action--end {
+  color: #293444;
+}
+
+.mock-map-popup {
+  position: absolute;
+  z-index: 18;
+  width: min(290px, calc(100% - 24px));
+  padding: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-panel);
+  transform: translate(-50%, calc(-100% - 12px));
+}
+
+.mock-map-popup--below {
+  transform: translate(-50%, 12px);
 }
 
 .mock-map {
@@ -869,10 +888,6 @@ a:focus-visible {
     box-shadow: var(--shadow-panel);
   }
 
-  .place-input__quick-actions {
-    min-height: 26px;
-  }
-
   .plan-button {
     min-height: 42px;
     margin-top: 8px;
@@ -916,7 +931,6 @@ a:focus-visible {
     height: 26px;
     align-items: center;
     justify-content: center;
-    gap: 6px;
     padding: 0;
     color: var(--color-text-muted);
     background: transparent;
@@ -971,8 +985,7 @@ a:focus-visible {
     bottom: calc(132px + var(--safe-bottom)) !important;
   }
 
-  .map-toast,
-  .camera-detail {
+  .map-toast {
     right: calc(62px + var(--safe-right));
     bottom: calc(142px + var(--safe-bottom));
     max-width: calc(100% - 78px - var(--safe-left) - var(--safe-right));
@@ -1017,10 +1030,6 @@ a:focus-visible {
   .search-panel {
     margin-top: 5px;
     padding: 7px;
-  }
-
-  .place-input__quick-actions {
-    display: none;
   }
 
   .plan-button {

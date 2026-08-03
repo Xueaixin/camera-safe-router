@@ -32,7 +32,7 @@ const ERROR_PRESENTATIONS: Record<ApiErrorCode, RouteErrorPresentation> = {
   OUTSIDE_ROUTING_BOUNDS: {
     state: 'outside-bounds',
     title: '超出可规划范围',
-    message: '起点或终点不在当前路网覆盖范围，请选择北京范围内地点。',
+    message: '起点或终点不在当前路网覆盖范围，请选择京津冀范围内地点。',
     retryable: false,
   },
   START_IN_RESTRICTED_AREA: {

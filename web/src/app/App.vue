@@ -13,7 +13,7 @@ import { useLocationStore } from '@/stores/locationStore';
 import { useMapStore } from '@/stores/mapStore';
 import { useRouteStore } from '@/stores/routeStore';
 import type { Coordinate, SelectedPlace } from '@/types/coordinate';
-import type { MapSelection, PlaceSuggestion } from '@/types/map';
+import type { MapEndpointTarget, MapSelection, PlaceSuggestion } from '@/types/map';
 
 interface MapViewExpose {
   searchPlaces(keyword: string, signal?: AbortSignal): Promise<PlaceSuggestion[]>;
@@ -84,9 +84,7 @@ function placeFromLocation(): SelectedPlace {
   };
 }
 
-function handleMapSelection(selection: MapSelection) {
-  const target = mapStore.selectionTarget;
-  if (!target) return;
+function handleMapSelection(selection: MapSelection, target: MapEndpointTarget) {
   const place: SelectedPlace = {
     name: selection.suggestedName,
     coordinate: selection.coordinate,
@@ -94,7 +92,6 @@ function handleMapSelection(selection: MapSelection) {
   };
   if (target === 'start') routeStore.setStart(place);
   else routeStore.setEnd(place);
-  mapStore.finishSelection();
 }
 
 function centerOnCurrent() {
@@ -127,7 +124,7 @@ onBeforeUnmount(() => {
           <ShieldCheck :size="22" aria-hidden="true" />
           <div>
             <h1>摄像头避让路线</h1>
-            <span>北京 · 驾车</span>
+            <span>京津冀 · 驾车</span>
           </div>
         </div>
         <span class="mode-badge" :class="{ 'mode-badge--mock': environment.useMockApi }">

@@ -108,4 +108,22 @@ describe('location store', () => {
     store.reset();
     vi.useRealTimers();
   });
+
+  it('accepts 150 meter accuracy and rejects values above the route threshold', () => {
+    const callbacks: PositionCallbacks = {};
+    const store = useLocationStore();
+    store.startWatching(
+      async (coordinate) => ({ ...coordinate, coordinateSystem: 'GCJ02' }),
+      geolocationStub(callbacks),
+    );
+
+    callbacks.success?.(position(116.39, 39.9, 150));
+    expect(store.isAccurate).toBe(true);
+    expect(store.canUseForRoute).toBe(true);
+
+    callbacks.success?.(position(116.39, 39.9, 150.1));
+    expect(store.isAccurate).toBe(false);
+    expect(store.canUseForRoute).toBe(false);
+    store.reset();
+  });
 });

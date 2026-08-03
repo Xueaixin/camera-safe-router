@@ -12,6 +12,14 @@ export const MOCK_SEARCH_PLACES = [
   { id: 'place-wangjing', name: '望京SOHO', district: '朝阳区', lng: 116.47, lat: 39.992 },
   { id: 'place-zhongguancun', name: '中关村', district: '海淀区', lng: 116.316, lat: 39.983 },
   { id: 'place-beijing-south', name: '北京南站', district: '丰台区', lng: 116.379, lat: 39.865 },
+  { id: 'place-tianjin-station', name: '天津站', district: '天津市河北区', lng: 117.21, lat: 39.136 },
+  {
+    id: 'place-shijiazhuang-station',
+    name: '石家庄站',
+    district: '石家庄市桥西区',
+    lng: 114.485,
+    lat: 38.01,
+  },
 ] as const;
 
 export const MOCK_CAMERA_PAGE: CameraPage = {

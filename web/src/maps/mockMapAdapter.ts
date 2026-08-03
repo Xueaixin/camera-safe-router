@@ -1,4 +1,5 @@
 import { MOCK_SEARCH_PLACES } from '@/mocks/fixtures';
+import { createCameraPopup, createMapPointPopup } from './mapPopupContent';
 import type { CameraView, OutputCoordinate } from '@/types/api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from '@/types/coordinate';
 import type { MapAdapter, MapAdapterCallbacks, MapViewport, PlaceSuggestion } from '@/types/map';
@@ -21,6 +22,9 @@ export class MockMapAdapter implements MapAdapter {
   private start: SelectedPlace | null = null;
   private end: SelectedPlace | null = null;
   private location: DisplayLocation | null = null;
+  private pendingSelection: { lng: number; lat: number } | null = null;
+  private popup: HTMLElement | null = null;
+  private popupKind: 'camera' | 'map-point' | null = null;
   private viewportListeners = new Set<() => void>();
   private readonly clickHandler = (event: MouseEvent) => this.handleClick(event);
 
@@ -46,6 +50,7 @@ export class MockMapAdapter implements MapAdapter {
   destroy() {
     this.canvas?.removeEventListener('click', this.clickHandler);
     this.resizeObserver?.disconnect();
+    this.closePopup();
     this.container?.replaceChildren();
     this.container = null;
     this.canvas = null;
@@ -109,6 +114,7 @@ export class MockMapAdapter implements MapAdapter {
   clearCameras() {
     this.cameras = [];
     if (this.container) this.container.dataset.cameraCount = '0';
+    if (this.popupKind === 'camera') this.closePopup();
     this.draw();
   }
 
@@ -144,15 +150,52 @@ export class MockMapAdapter implements MapAdapter {
       return Math.hypot(cameraX - x * bounds.width, cameraY - y * bounds.height) <= 16;
     });
     if (nearestCamera) {
-      this.callbacks.onCameraClick(nearestCamera);
+      const [cameraX, cameraY] = this.project(nearestCamera, bounds.width, bounds.height);
+      this.openPopup(createCameraPopup(nearestCamera), cameraX, cameraY, 'camera');
       return;
     }
     const lng = MOCK_VIEWPORT.minLng + x * (MOCK_VIEWPORT.maxLng - MOCK_VIEWPORT.minLng);
     const lat = MOCK_VIEWPORT.maxLat - y * (MOCK_VIEWPORT.maxLat - MOCK_VIEWPORT.minLat);
-    this.callbacks.onMapClick({
+    const selection = {
       coordinate: { lng, lat, coordinateSystem: 'GCJ02' },
       suggestedName: `地图选点 ${lng.toFixed(5)}, ${lat.toFixed(5)}`,
+    } as const;
+    const content = createMapPointPopup(selection, (target) => {
+      this.callbacks?.onEndpointSelect(selection, target);
+      this.pendingSelection = null;
+      this.closePopup();
+      this.draw();
     });
+    this.openPopup(content, x * bounds.width, y * bounds.height, 'map-point');
+    this.pendingSelection = selection.coordinate;
+    this.draw();
+  }
+
+  private openPopup(popup: HTMLElement, x: number, y: number, kind: 'camera' | 'map-point') {
+    if (!this.container) return;
+    const replacedSelection = this.popupKind === 'map-point';
+    this.closePopup();
+    if (replacedSelection) {
+      this.pendingSelection = null;
+      this.draw();
+    }
+    const horizontalInset = Math.min(150, Math.max(16, this.container.clientWidth / 2));
+    popup.classList.add('mock-map-popup');
+    popup.style.left = `${Math.min(
+      Math.max(x, horizontalInset),
+      Math.max(horizontalInset, this.container.clientWidth - horizontalInset),
+    )}px`;
+    popup.style.top = `${y}px`;
+    if (y < 170) popup.classList.add('mock-map-popup--below');
+    this.container.append(popup);
+    this.popup = popup;
+    this.popupKind = kind;
+  }
+
+  private closePopup() {
+    this.popup?.remove();
+    this.popup = null;
+    this.popupKind = null;
   }
 
   private draw() {
@@ -185,6 +228,9 @@ export class MockMapAdapter implements MapAdapter {
     }
     this.drawPath(context, this.route, width, height);
     this.cameras.forEach((camera) => this.drawPoint(context, camera, width, height, '#dc3f35', 5));
+    if (this.pendingSelection) {
+      this.drawPoint(context, this.pendingSelection, width, height, '#1769e0', 7);
+    }
     if (this.start?.coordinate.coordinateSystem === 'GCJ02') {
       this.drawPoint(context, this.start.coordinate, width, height, '#15803d', 8);
     }

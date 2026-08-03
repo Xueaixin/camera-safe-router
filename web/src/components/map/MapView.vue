@@ -8,18 +8,18 @@ import RouteLayer from './RouteLayer.vue';
 import { resetAmapLoader } from '@/maps/amapLoader';
 import { createMapAdapter } from '@/maps/createMapAdapter';
 import type { ApiClient } from '@/services/apiClient';
-import type { CameraView } from '@/types/api';
 import type { Coordinate } from '@/types/coordinate';
-import type { MapAdapter, MapSelection, PlaceSuggestion } from '@/types/map';
+import type { MapAdapter, MapEndpointTarget, MapSelection, PlaceSuggestion } from '@/types/map';
 
 defineProps<{ api: ApiClient }>();
-const emit = defineEmits<{ mapSelection: [selection: MapSelection] }>();
+const emit = defineEmits<{
+  mapSelection: [selection: MapSelection, target: MapEndpointTarget];
+}>();
 
 const container = ref<HTMLElement | null>(null);
 const map = shallowRef<MapAdapter | null>(null);
 const loadState = ref<'loading' | 'ready' | 'error'>('loading');
 const loadError = ref('');
-const selectedCamera = ref<CameraView | null>(null);
 
 async function initialize() {
   if (!container.value) return;
@@ -30,10 +30,7 @@ async function initialize() {
   try {
     const nextMap = await createMapAdapter();
     await nextMap.initialize(container.value, {
-      onMapClick: (selection) => emit('mapSelection', selection),
-      onCameraClick: (camera) => {
-        selectedCamera.value = camera;
-      },
+      onEndpointSelect: (selection, target) => emit('mapSelection', selection, target),
     });
     map.value = nextMap;
     loadState.value = 'ready';
@@ -114,21 +111,6 @@ onBeforeUnmount(() => map.value?.destroy());
       <CameraLayer :map="map" :api="api" />
       <CurrentLocationLayer :map="map" />
     </template>
-
-    <div v-if="selectedCamera" class="camera-detail" data-testid="camera-detail">
-      <button
-        class="camera-detail__close"
-        type="button"
-        aria-label="关闭摄像头详情"
-        title="关闭"
-        @click="selectedCamera = null"
-      >
-        ×
-      </button>
-      <strong>{{ selectedCamera.cameraType }}</strong>
-      <span>{{ selectedCamera.address }}</span>
-      <span>方向：{{ selectedCamera.directionText || '未标注' }}</span>
-    </div>
 
     <a
       class="osm-attribution"

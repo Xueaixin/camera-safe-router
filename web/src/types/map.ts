@@ -13,6 +13,8 @@ export interface MapSelection {
   suggestedName: string;
 }
 
+export type MapEndpointTarget = 'start' | 'end';
+
 export interface MapViewport {
   minLng: number;
   minLat: number;
@@ -22,8 +24,7 @@ export interface MapViewport {
 }
 
 export interface MapAdapterCallbacks {
-  onMapClick: (selection: MapSelection) => void;
-  onCameraClick: (camera: CameraView | null) => void;
+  onEndpointSelect: (selection: MapSelection, target: MapEndpointTarget) => void;
 }
 
 export interface MapAdapter {

@@ -1,4 +1,5 @@
 import { loadAmap } from './amapLoader';
+import { createCameraPopup, createMapPointPopup } from './mapPopupContent';
 import type {
   AmapAutoCompleteResult,
   AmapCircle,
@@ -46,8 +47,11 @@ export class AmapMapAdapter implements MapAdapter {
   private currentMarker: AmapMarker | null = null;
   private accuracyCircle: AmapCircle | null = null;
   private infoWindow: AmapInfoWindow | null = null;
+  private infoWindowKind: 'camera' | 'map-point' | null = null;
   private camerasById = new Map<string, CameraView>();
   private viewportListeners = new Set<() => void>();
+  private mapClickSequence = 0;
+  private suppressMapClickUntil = 0;
   private readonly mapClickHandler = (event?: unknown) => void this.handleMapClick(event);
   private readonly viewportHandler = () => this.viewportListeners.forEach((listener) => listener());
   private readonly cameraClickHandler = (event: unknown) => this.handleCameraClick(event);
@@ -76,7 +80,8 @@ export class AmapMapAdapter implements MapAdapter {
     this.clearCameras();
     this.setEndpointMarkers(null, null);
     this.setCurrentLocation(null);
-    this.infoWindow?.close();
+    this.closeInfoWindow();
+    this.mapClickSequence += 1;
     if (this.map) {
       this.map.off('click', this.mapClickHandler);
       this.map.off('moveend', this.viewportHandler);
@@ -91,7 +96,7 @@ export class AmapMapAdapter implements MapAdapter {
 
   searchPlaces(keyword: string, signal?: AbortSignal): Promise<PlaceSuggestion[]> {
     if (!this.amap) return Promise.reject(new Error('地图尚未加载'));
-    const autocomplete = new this.amap.AutoComplete({ city: '北京', citylimit: true });
+    const autocomplete = new this.amap.AutoComplete({ citylimit: false });
     return new Promise((resolve, reject) => {
       if (signal?.aborted) {
         reject(new DOMException('搜索已取消', 'AbortError'));
@@ -114,7 +119,7 @@ export class AmapMapAdapter implements MapAdapter {
               {
                 id: tip.id || `amap-tip-${index}`,
                 name: tip.name,
-                district: tip.district || '北京市',
+                district: tip.district || '地区未标注',
                 coordinate: {
                   lng: tip.location.getLng(),
                   lat: tip.location.getLat(),
@@ -212,7 +217,7 @@ export class AmapMapAdapter implements MapAdapter {
     }
     this.cameraLayer = null;
     this.camerasById.clear();
-    this.infoWindow?.close();
+    if (this.infoWindowKind === 'camera') this.closeInfoWindow();
   }
 
   setCurrentLocation(location: DisplayLocation | null) {
@@ -300,8 +305,10 @@ export class AmapMapAdapter implements MapAdapter {
   }
 
   private async handleMapClick(event: unknown) {
+    if (Date.now() <= this.suppressMapClickUntil) return;
     const lnglat = lngLatFromEvent(event);
     if (!lnglat || !this.callbacks) return;
+    const sequence = ++this.mapClickSequence;
     const coordinate = {
       lng: lnglat.getLng(),
       lat: lnglat.getLat(),
@@ -315,12 +322,18 @@ export class AmapMapAdapter implements MapAdapter {
         // Coordinate remains usable when reverse geocoding is unavailable.
       }
     }
-    this.callbacks?.onMapClick({ coordinate, suggestedName });
+    if (sequence !== this.mapClickSequence || !this.callbacks) return;
+    const selection = { coordinate, suggestedName };
+    const content = createMapPointPopup(selection, (target) => {
+      this.callbacks?.onEndpointSelect(selection, target);
+      this.closeInfoWindow();
+    });
+    this.openInfoWindow(content, lngLatTuple(coordinate), 'map-point', [0, -8]);
   }
 
   private reverseGeocode(position: [number, number]): Promise<string> {
     if (!this.amap) return Promise.reject(new Error('地图尚未加载'));
-    const geocoder = new this.amap.Geocoder({ city: '北京' });
+    const geocoder = new this.amap.Geocoder();
     return new Promise((resolve, reject) => {
       geocoder.getAddress(position, (status, result) => {
         if (
@@ -339,20 +352,34 @@ export class AmapMapAdapter implements MapAdapter {
 
   private handleCameraClick(event: unknown) {
     if (!isRecord(event) || !isRecord(event.data) || typeof event.data.id !== 'string') return;
+    this.suppressMapClickUntil = Date.now() + 250;
+    this.mapClickSequence += 1;
+    const originEvent = isRecord(event.originEvent) ? event.originEvent : null;
+    if (originEvent && typeof originEvent.stopPropagation === 'function') {
+      originEvent.stopPropagation.call(originEvent);
+    }
     const camera = this.camerasById.get(event.data.id) ?? null;
-    this.callbacks?.onCameraClick(camera);
     if (!camera || !this.amap || !this.map) return;
-    const content = document.createElement('div');
-    content.className = 'camera-popup';
-    const title = document.createElement('strong');
-    title.textContent = camera.cameraType;
-    const address = document.createElement('span');
-    address.textContent = camera.address;
-    const direction = document.createElement('span');
-    direction.textContent = camera.directionText ? `方向：${camera.directionText}` : '方向：未标注';
-    content.append(title, address, direction);
+    const content = createCameraPopup(camera);
+    this.openInfoWindow(content, lngLatTuple(camera), 'camera', [0, -10]);
+  }
+
+  private openInfoWindow(
+    content: HTMLElement,
+    position: [number, number],
+    kind: 'camera' | 'map-point',
+    offset: [number, number],
+  ) {
+    if (!this.amap || !this.map) return;
     this.infoWindow?.close();
-    this.infoWindow = new this.amap.InfoWindow({ content, offset: [0, -10] });
-    this.infoWindow.open(this.map, lngLatTuple(camera));
+    this.infoWindow = new this.amap.InfoWindow({ content, offset });
+    this.infoWindowKind = kind;
+    this.infoWindow.open(this.map, position);
+  }
+
+  private closeInfoWindow() {
+    this.infoWindow?.close();
+    this.infoWindow = null;
+    this.infoWindowKind = null;
   }
 }

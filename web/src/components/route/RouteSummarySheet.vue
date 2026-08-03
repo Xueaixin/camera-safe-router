@@ -14,6 +14,7 @@ import {
 } from '@lucide/vue';
 
 import RouteSteps from './RouteSteps.vue';
+import { LOCATION_POLICY } from '@/config/locationPolicy';
 import { useLocationStore } from '@/stores/locationStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { formatDistance, formatDuration, formatSnapshotVersion } from '@/utils/format';
@@ -28,7 +29,8 @@ const rerouteDisabledReason = computed(() => {
   if (routeStore.isPlanning) return '路线规划正在进行';
   if (!locationStore.browserLocation) return '尚未获取当前位置';
   if (!locationStore.isFresh) return '当前位置已超过 30 秒，请重新获取';
-  if (!locationStore.isAccurate) return '定位精度差于 100 米，请等待更准确的位置';
+  if (!locationStore.isAccurate)
+    return `定位精度差于 ${LOCATION_POLICY.maximumAccuracyMeters} 米，请等待更准确的位置`;
   if (locationStore.state !== 'watching') return '当前位置暂不可用';
   return '';
 });
@@ -89,8 +91,6 @@ function retry() {
       @click="expanded = !expanded"
     >
       <span aria-hidden="true" />
-      <ChevronDown v-if="expanded" :size="17" aria-hidden="true" />
-      <ChevronUp v-else :size="17" aria-hidden="true" />
     </button>
 
     <div class="route-sheet__summary" aria-live="polite">
@@ -202,8 +202,8 @@ function retry() {
         <AlertCircle :size="18" aria-hidden="true" />
         <span>
           当前定位精度约
-          {{ Math.round(locationStore.browserLocation.accuracyMeters) }} 米，请等待精度提升到 100
-          米以内。
+          {{ Math.round(locationStore.browserLocation.accuracyMeters) }} 米，请等待精度提升到
+          {{ LOCATION_POLICY.maximumAccuracyMeters }} 米以内。
         </span>
       </div>
 
