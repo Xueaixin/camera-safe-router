@@ -15,9 +15,9 @@ class RuntimePathConfigurationTest {
         MockEnvironment environment = applicationEnvironment();
 
         assertThat(environment.getRequiredProperty("app.routing.pbf-path"))
-                .isEqualTo("/camera-safe-routing-data/osm/beijing-latest.osm.pbf");
+                .isEqualTo("/camera-safe-routing-data/osm/jingjinji-latest.osm.pbf");
         assertThat(environment.getRequiredProperty("app.routing.graph-cache-path"))
-                .isEqualTo("/camera-safe-routing-data/graph-cache/beijing");
+                .isEqualTo("/camera-safe-routing-data/graph-cache/jingjinji");
         assertThat(environment.getRequiredProperty("app.cameras.json-path"))
                 .isEqualTo("/camera-safe-routing-data/cameras/camera.json");
         assertThat(environment.getRequiredProperty("app.cameras.snapshot-path"))
@@ -46,9 +46,9 @@ class RuntimePathConfigurationTest {
                 .withProperty("ROUTING_DATA_ROOT", "R:/routing-data");
 
         assertThat(environment.getRequiredProperty("app.routing.pbf-path"))
-                .isEqualTo("R:/routing-data/osm/beijing-latest.osm.pbf");
+                .isEqualTo("R:/routing-data/osm/jingjinji-latest.osm.pbf");
         assertThat(environment.getRequiredProperty("app.routing.graph-cache-path"))
-                .isEqualTo("R:/routing-data/graph-cache/beijing");
+                .isEqualTo("R:/routing-data/graph-cache/jingjinji");
         assertThat(environment.getRequiredProperty("app.cameras.json-path"))
                 .isEqualTo("R:/routing-data/cameras/camera.json");
         assertThat(environment.getRequiredProperty("app.cameras.snapshot-path"))

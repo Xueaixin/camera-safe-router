@@ -1,6 +1,6 @@
 # 摄像头安全路线规划
 
-一个面向北京区域的移动端优先 Web 路线规划 MVP。用户输入起点和终点后，后端基于本地 OSM 路网规划驾车路线，并在搜索过程中硬避开摄像头点位对应的道路；网页负责高德地图展示、当前位置显示和手动从当前位置重新规划。
+一个面向京津冀区域的移动端优先 Web 路线规划 MVP。用户输入起点和终点后，后端基于本地 OSM 路网规划驾车路线，并在搜索过程中硬避开摄像头点位对应的道路；网页负责高德地图展示、当前位置显示和手动从当前位置重新规划。
 
 > 当前项目属于技术验证版本。摄像头来源、坐标精度和 OSM 道路属性仍需持续核验，路线结果不能替代交通法规、道路标志或正式导航产品。
 
@@ -13,8 +13,8 @@
 - 当前保留 5,707 个点，其中 30 米匹配 5,688 个、未匹配 19 个。
 - 摄像头远程更新已支持后端内部定时执行和本机手动触发；默认关闭，确认数据源使用许可后通过环境变量开启。
 - 后端业务日志使用中文，同时输出到控制台和数据根目录的 `logs`，按日期和大小滚动归档。
-- 下一开发阶段扩展京津冀路网；跨区域路线是否应优先进入六环路已列为后续算法议题。
-- 当前仅承诺北京区域、驾车、手动重新规划，不包含自动偏航重算和逐向导航。
+- 京津冀路网已完成切分、构图、缓存重启和四条跨城路线验证，并已成为后端默认路网；跨区域路线是否应优先进入六环路已列为后续算法议题。
+- 当前仅承诺京津冀候选范围内的驾车和手动重新规划，不包含自动偏航重算和逐向导航。
 
 详细进度和未完成项见 [开发计划与当前进度](docs/开发计划与当前进度.md)。
 
@@ -24,7 +24,7 @@
 flowchart LR
     U["移动端或桌面浏览器"] --> W["Vue 3 + 高德 Web JS API"]
     W -->|"WGS84 / GCJ-02 显式坐标"| A["Spring Boot API"]
-    P["beijing-latest.osm.pbf"] --> G["GraphHopper 路网与缓存"]
+    P["jingjinji-latest.osm.pbf"] --> G["GraphHopper 路网与缓存"]
     C["摄像头 camera.json"] --> S["摄像头与禁行边快照"]
     G --> R["搜索期硬禁边路线引擎"]
     S --> R
@@ -68,9 +68,9 @@ Windows 默认使用后端启动所在盘根目录的 `camera-safe-routing-data`
 
 ```text
 F:\camera-safe-routing-data\
-├─ osm\beijing-latest.osm.pbf
+├─ osm\jingjinji-latest.osm.pbf
 ├─ cameras\camera.json
-├─ graph-cache\beijing\
+├─ graph-cache\jingjinji\
 ├─ snapshots\
 ├─ downloads\
 ├─ work\
@@ -96,8 +96,8 @@ ROUTING_DATA_ROOT=D:\camera-safe-routing-data
 
 | 数据 | 当前用途 | 来源 |
 |---|---|---|
-| 北京 OSM PBF | 当前北京路网 | [beijing-latest.osm.pbf](http://download.openstreetmap.fr/extracts/asia/china/beijing-latest.osm.pbf) |
-| 中国 OSM PBF | 后续自动切分京津冀 | [china-latest.osm.pbf](http://download.openstreetmap.fr/extracts/asia/china-latest.osm.pbf) |
+| 京津冀 OSM PBF | 当前路网，由中国源离线切分 | `osm/jingjinji-latest.osm.pbf` |
+| 中国 OSM PBF | 京津冀切分和后续月更源 | [china-latest.osm.pbf](http://download.openstreetmap.fr/extracts/asia/china-latest.osm.pbf) |
 | 摄像头点位 | 禁行点快照 | `POST https://www.jjz365.cn/CameraData/GetAllRing`，正式文件名为 `camera.json` |
 
 OSM 数据遵循 Open Database License，地图或衍生数据发布时必须保留 OpenStreetMap 署名。摄像头接口的可用性、使用许可、频率限制和字段稳定性需要在自动同步上线前确认。
@@ -111,12 +111,43 @@ OSM 数据遵循 Open Database License，地图或衍生数据发布时必须保
 - IntelliJ IDEA、WebStorm 可选
 - 高德 Web JS Key 和安全密钥，仅保存在 `web/.env.local`
 
+`osmium-tool` 只在从中国 PBF 离线切分京津冀数据时需要，运行 Spring Boot 服务不需要它。Windows 可以使用便携 `micromamba` 在数据目录创建隔离环境，无需修改全局 PATH 或现有 Python：
+
+```powershell
+$dataRoot = 'E:\camera-safe-routing-data'
+$micromambaHome = Join-Path $dataRoot 'tools\micromamba'
+$micromambaArchive = Join-Path $micromambaHome 'micromamba-win-64.tar.bz2'
+New-Item -ItemType Directory -Path $micromambaHome -Force | Out-Null
+Invoke-WebRequest `
+  -Uri 'https://micro.mamba.pm/api/micromamba/win-64/latest' `
+  -OutFile $micromambaArchive
+tar.exe -xjf $micromambaArchive -C $micromambaHome
+
+$micromamba = Join-Path $dataRoot 'tools\micromamba\Library\bin\micromamba.exe'
+$env:MAMBA_ROOT_PREFIX = Join-Path $dataRoot 'tools\micromamba-root'
+& $micromamba create -y `
+  -p (Join-Path $dataRoot 'tools\osmium-env') `
+  -c conda-forge `
+  'osmium-tool=1.19.1'
+```
+
+上述压缩包来自 [micromamba 官方 Windows 下载地址](https://micro.mamba.pm/api/micromamba/win-64/latest)。当前本机工具路径是 `E:\camera-safe-routing-data\tools\osmium-env\Library\bin\osmium.exe`。Linux 服务器可以安装发行版的 `osmium-tool`，但若直接上传本地切分好的京津冀 PBF，服务端不需要再安装。
+
+切分和引用完整性检查：
+
+```powershell
+.\scripts\prepare-jingjinji-osm.ps1 `
+  -DataRoot 'E:\camera-safe-routing-data'
+```
+
+脚本使用 `smart` 策略和 `113.0,35.5,120.5,43.0` 边界，检查所有 way 节点引用，并单独检查 GraphHopper 使用的 `type=restriction` 关系。当前 POC 明细见 [京津冀路网 POC 验证报告](docs/京津冀路网POC验证报告.md)。
+
 ## 后端启动
 
-1. 将北京 PBF 放到数据根目录的 `osm/beijing-latest.osm.pbf`。
+1. 将已验证的京津冀 PBF 放到数据根目录的 `osm/jingjinji-latest.osm.pbf`。
 2. 将摄像头 JSON 放到 `cameras/camera.json`。
 3. IDEA 打开 `server/pom.xml`，Project SDK、Maven Runner JRE 均选择 JDK 21。
-4. 启动类为 `cn.camera.safe.CameraSafeRoutingApplication`，建议 VM options 使用 `-Xms1g -Xmx2g`。
+4. 启动类为 `cn.camera.safe.CameraSafeRoutingApplication`。已有图缓存时直接 Debug 即可，不需要设置路网环境变量；建议 VM options 使用 `-Xms1g -Xmx2g`。
 
 也可以从 PowerShell 启动：
 

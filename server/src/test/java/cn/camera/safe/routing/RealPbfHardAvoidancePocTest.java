@@ -40,7 +40,7 @@ class RealPbfHardAvoidancePocTest {
     void importsCachesRoutesAndRejectsABaselineEdgeInsideTheSearch() throws Exception {
         String configuredPbf = System.getProperty("poc.pbf");
         assumeTrue(configuredPbf != null && !configuredPbf.isBlank(),
-                "Set -Dpoc.pbf=<path-to-beijing-latest.osm.pbf> to run the real PBF POC");
+                "Set -Dpoc.pbf=<path-to-jingjinji-latest.osm.pbf> to run the real PBF POC");
         Path pbf = Path.of(configuredPbf).toAbsolutePath().normalize();
         assertThat(pbf).isRegularFile();
 

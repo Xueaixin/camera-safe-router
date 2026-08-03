@@ -17,8 +17,8 @@ management:
 
 app:
   routing:
-    pbf-path: ${ROUTING_PBF_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/osm/beijing-latest.osm.pbf}
-    graph-cache-path: ${ROUTING_GRAPH_CACHE_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/graph-cache/beijing}
+    pbf-path: ${ROUTING_PBF_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/osm/jingjinji-latest.osm.pbf}
+    graph-cache-path: ${ROUTING_GRAPH_CACHE_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/graph-cache/jingjinji}
     safety-radius-meters: ${ROUTING_SAFETY_RADIUS_METERS:30}
     calculation-threads: ${ROUTING_CALCULATION_THREADS:4}
     calculation-queue-capacity: ${ROUTING_CALCULATION_QUEUE_CAPACITY:16}
