@@ -1,0 +1,96 @@
+{
+  "pbfSha256": "2a1bcebc16586858bc116a67dd10b9e5191241bbbb096866d0d0a2538ca16131",
+  "cameraSha256": "d0cde33c0c3c1bec2dbd5aa501cb5706b5f04317d26853f0d781994d7de3a42c",
+  "routes": [
+    {
+      "id": "beijing-tianjin",
+      "category": "跨城",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 117.200983, "lat": 39.084158},
+      "minDistanceMeters": 120000,
+      "maxDistanceMeters": 180000
+    },
+    {
+      "id": "beijing-shijiazhuang",
+      "category": "跨城",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 114.5149, "lat": 38.0428},
+      "minDistanceMeters": 260000,
+      "maxDistanceMeters": 360000
+    },
+    {
+      "id": "beijing-zhangjiakou",
+      "category": "跨城",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 114.8859, "lat": 40.7689},
+      "minDistanceMeters": 170000,
+      "maxDistanceMeters": 270000
+    },
+    {
+      "id": "tianjin-shijiazhuang",
+      "category": "跨城",
+      "start": {"lng": 117.200983, "lat": 39.084158},
+      "end": {"lng": 114.5149, "lat": 38.0428},
+      "minDistanceMeters": 260000,
+      "maxDistanceMeters": 370000
+    },
+    {
+      "id": "beijing-yanqing-badaling",
+      "category": "北京边缘",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 116.0080, "lat": 40.3590},
+      "minDistanceMeters": 45000,
+      "maxDistanceMeters": 120000
+    },
+    {
+      "id": "beijing-miyun",
+      "category": "北京边缘",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 116.8430, "lat": 40.3770},
+      "minDistanceMeters": 50000,
+      "maxDistanceMeters": 140000
+    },
+    {
+      "id": "beijing-fangshan-g4",
+      "category": "北京边缘",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 116.0830, "lat": 39.6810},
+      "minDistanceMeters": 25000,
+      "maxDistanceMeters": 100000
+    },
+    {
+      "id": "beijing-daxing-south",
+      "category": "北京边缘",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 116.3190, "lat": 39.5160},
+      "minDistanceMeters": 35000,
+      "maxDistanceMeters": 110000
+    },
+    {
+      "id": "tongzhou-hebei-east",
+      "category": "北京边缘",
+      "start": {"lng": 116.6570, "lat": 39.9090},
+      "end": {"lng": 116.8170, "lat": 39.9490},
+      "minDistanceMeters": 5000,
+      "maxDistanceMeters": 60000
+    }
+  ],
+  "noCompliantRoutes": [
+    {
+      "id": "beijing-yanqing-urban-blocked",
+      "category": "真实无合规路线",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 115.9740, "lat": 40.4560},
+      "minDistanceMeters": 60000,
+      "maxDistanceMeters": 140000
+    },
+    {
+      "id": "beijing-fangshan-urban-blocked",
+      "category": "真实无合规路线",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 116.1430, "lat": 39.7350},
+      "minDistanceMeters": 25000,
+      "maxDistanceMeters": 100000
+    }
+  ]
+}

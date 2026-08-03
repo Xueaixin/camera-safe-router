@@ -29,7 +29,7 @@ class RealCameraJsonTest {
         assertThat(result.unrecognizedSixRingOutRecordCount()).isEqualTo(7);
         assertThat(result.cameras()).hasSize(5_707);
         assertThat(result.sourceSha256())
-                .isEqualTo("0c16ed44ef2e24cd4759afba28d6448925db699a4d3b38b05980f076e6ac7404");
+                .isEqualTo("d0cde33c0c3c1bec2dbd5aa501cb5706b5f04317d26853f0d781994d7de3a42c");
         JsonNode candidates = new ObjectMapper().readTree(
                 RealCameraJsonTest.class.getResourceAsStream("/fixtures/real-camera-candidates-50.json"));
         Set<String> candidateIds = new HashSet<>();
