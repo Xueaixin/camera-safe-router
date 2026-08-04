@@ -1,6 +1,7 @@
 package cn.camera.safe.routing;
 
 import cn.camera.safe.config.AppProperties;
+import cn.camera.safe.config.RoutingProfileMode;
 import com.graphhopper.config.Profile;
 import com.graphhopper.routing.ev.BooleanEncodedValue;
 import com.graphhopper.routing.ev.EnumEncodedValue;
@@ -37,29 +38,43 @@ class RoutingFoundationPocTest {
         Path pbf = Path.of(configuredPbf).toAbsolutePath().normalize();
         Path graphCache = Path.of(configuredGraphCache).toAbsolutePath().normalize();
         Path report = Path.of(configuredReport).toAbsolutePath().normalize();
-        GraphHopperManager manager = new GraphHopperManager(properties(pbf, graphCache));
+        AppProperties properties = properties(pbf, graphCache);
+        GraphHopperManager manager = new GraphHopperManager(properties);
         manager.initialize();
         try {
             HardAvoidingGraphHopper hopper = manager.requireHopper();
             Profile profile = hopper.getProfile("car");
             CustomModel customModel = profile.getCustomModel();
-            boolean roadAccessReferenced = java.util.stream.Stream.concat(
-                            customModel.getPriority().stream(), customModel.getSpeed().stream())
+            boolean roadAccessReferenced = java.util.stream.Stream.of(
+                            customModel.getPriority(),
+                            customModel.getSpeed(),
+                            customModel.getTurnPenalty())
+                    .flatMap(java.util.Collection::stream)
                     .map(Object::toString)
                     .anyMatch(statement -> statement.contains("road_access"));
             boolean turnEncodingPresent = !hopper.getEncodingManager().getTurnEncodedValues().isEmpty();
             Map<RoadAccess, Long> roadAccessCounts = roadAccessCounts(hopper);
 
-            assertThat(profile.hasTurnCosts()).as("current car profile turn costs").isFalse();
-            assertThat(turnEncodingPresent).as("turn encoded values in the current cache").isFalse();
-            assertThat(customModel.getDistanceInfluence()).isEqualTo(90.0);
-            assertThat(roadAccessReferenced).as("road_access used by current car custom model").isFalse();
+            RoutingProfileMode profileMode = properties.routing().profileMode();
+            if (profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1) {
+                assertThat(profile.hasTurnCosts()).isTrue();
+                assertThat(turnEncodingPresent).isTrue();
+                assertThat(customModel.getDistanceInfluence())
+                        .isEqualTo(RoutingGraphConfiguration.DISTANCE_INFLUENCE_SECONDS_PER_KILOMETER);
+                assertThat(roadAccessReferenced).isTrue();
+            } else {
+                assertThat(profile.hasTurnCosts()).as("current car profile turn costs").isFalse();
+                assertThat(turnEncodingPresent).as("turn encoded values in the current cache").isFalse();
+                assertThat(customModel.getDistanceInfluence()).isEqualTo(90.0);
+                assertThat(roadAccessReferenced).as("road_access used by current car custom model").isFalse();
+            }
             assertThat(roadAccessCounts.getOrDefault(RoadAccess.PRIVATE, 0L)).isPositive();
             assertThat(roadAccessCounts.getOrDefault(RoadAccess.DESTINATION, 0L)).isPositive();
 
             writeReport(
                     report,
                     manager.requireGraphFingerprint(),
+                    profileMode,
                     profile,
                     customModel,
                     turnEncodingPresent,
@@ -91,6 +106,7 @@ class RoutingFoundationPocTest {
     private static void writeReport(
             Path output,
             String graphFingerprint,
+            RoutingProfileMode profileMode,
             Profile profile,
             CustomModel customModel,
             boolean turnEncodingPresent,
@@ -98,6 +114,7 @@ class RoutingFoundationPocTest {
             Map<RoadAccess, Long> roadAccessCounts) throws Exception {
         StringBuilder report = new StringBuilder("# 路线搜索基础配置 POC 报告\n\n")
                 .append("- 图指纹：`").append(graphFingerprint).append("`\n")
+                .append("- 路由模式：`").append(profileMode).append("`\n")
                 .append("- Profile：`").append(profile.getName()).append("`\n\n")
                 .append("## 当前结论\n\n")
                 .append("| 检查项 | 当前结果 |\n|---|---|\n")
@@ -106,7 +123,9 @@ class RoutingFoundationPocTest {
                 .append("| `car.json` distance influence | ")
                 .append(String.format(Locale.ROOT, "%.1f", customModel.getDistanceInfluence())).append(" |\n")
                 .append("| `car.json` 引用 road_access | ").append(roadAccessReferenced).append(" |\n\n")
-                .append("当前缓存没有导入可供搜索使用的转向限制；当前内置 `car.json` 是时间权重叠加每公里 90 秒的距离影响，不是距离最短权重；虽然图中编码了 `road_access`，当前模型没有使用它。三项都不满足正式六环算法的正确性门槛。\n\n")
+                .append(profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
+                        ? "候选缓存已导入机动车转向限制，使用距离主导权重，并通过 road_access 入口规则避免把受限道路用作普通穿行道路；精确业务语义仍由最小图和真实路线回归共同验证。\n\n"
+                        : "当前缓存没有导入可供搜索使用的转向限制；当前内置 `car.json` 是时间权重叠加每公里 90 秒的距离影响，不是距离最短权重；虽然图中编码了 `road_access`，当前模型没有使用它。三项都不满足正式六环算法的正确性门槛。\n\n")
                 .append("## 可驾车有向遍历的 road_access 分布\n\n")
                 .append("| road_access | 遍历数 |\n|---|---:|\n");
         for (RoadAccess access : RoadAccess.values()) {
@@ -119,9 +138,18 @@ class RoutingFoundationPocTest {
     }
 
     private static AppProperties properties(Path pbf, Path graphCache) {
+        RoutingProfileMode profileMode = RoutingProfileMode.valueOf(
+                System.getProperty("real.routing.profile.mode", RoutingProfileMode.CURRENT.name()));
+        Path currentCache = profileMode == RoutingProfileMode.CURRENT
+                ? graphCache
+                : graphCache.resolveSibling(graphCache.getFileName() + "-current-reference");
+        Path candidateCache = profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
+                ? graphCache
+                : graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference");
         return new AppProperties(
                 new AppProperties.Routing(
-                        pbf.toString(), graphCache.toString(), 30, 2, 4,
+                        pbf.toString(), currentCache.toString(), candidateCache.toString(), profileMode,
+                        30, 2, 4,
                         Duration.ofSeconds(30), 2_000_000),
                 new AppProperties.Cameras(
                         pbf.toString(), graphCache.resolve("poc-snapshots").toString(),

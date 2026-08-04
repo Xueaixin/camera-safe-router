@@ -12,6 +12,7 @@ import cn.camera.safe.routing.BlockedEdgeSnapshot;
 import cn.camera.safe.routing.GraphHopperManager;
 import cn.camera.safe.routing.RoutingSnapshot;
 import cn.camera.safe.routing.RoutingSnapshotManager;
+import cn.camera.safe.routing.SixthRingRoutingManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -33,9 +34,10 @@ class OperationsControllerTest {
     void healthIsUpWhileReadinessTracksGraphSnapshotAndBlockedVersions() throws Exception {
         GraphHopperManager graph = mock(GraphHopperManager.class);
         RoutingSnapshotManager snapshots = mock(RoutingSnapshotManager.class);
+        SixthRingRoutingManager sixthRing = mock(SixthRingRoutingManager.class);
         CameraRefreshService refresh = mock(CameraRefreshService.class);
         OperationsController controller = new OperationsController(
-                graph, snapshots, refresh, mock(CameraUpdateService.class),
+                graph, snapshots, sixthRing, refresh, mock(CameraUpdateService.class),
                 new AdminAccessGuard(properties()), properties());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
@@ -45,6 +47,7 @@ class OperationsControllerTest {
                 .build();
 
         when(graph.isReady()).thenReturn(false);
+        when(sixthRing.isReady()).thenReturn(false);
         when(snapshots.current()).thenReturn(Optional.empty());
         mvc.perform(get("/api/v1/health"))
                 .andExpect(status().isOk())
@@ -55,11 +58,13 @@ class OperationsControllerTest {
                 .andExpect(jsonPath("$.graphLoaded").value(false));
 
         when(graph.isReady()).thenReturn(true);
+        when(sixthRing.isReady()).thenReturn(true);
         when(snapshots.current()).thenReturn(Optional.of(snapshot()));
         mvc.perform(get("/api/v1/readiness"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("READY"))
                 .andExpect(jsonPath("$.graphLoaded").value(true))
+                .andExpect(jsonPath("$.sixthRingTopologyLoaded").value(true))
                 .andExpect(jsonPath("$.cameraSnapshotLoaded").value(true))
                 .andExpect(jsonPath("$.blockedEdgesLoaded").value(true));
     }

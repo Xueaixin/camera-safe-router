@@ -1,8 +1,9 @@
 openapi: 3.0.3
 info:
   title: Camera Safe Routing API
-  version: 1.0.0
-  description: 北京摄像头点位避让路线规划首期接口契约
+  version: 1.1.0
+  description: 京津冀摄像头点位避让和六环跨界路线规划接口契约
+x-implementation-status: ROUTE_V1_1_IMPLEMENTED_WITH_UNAPPROVED_BOUNDARY
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -16,6 +17,9 @@ paths:
       tags: [Routes]
       operationId: planRoute
       summary: 规划一条避开当前摄像头快照的驾车路线
+      description: |
+        服务端根据起终点与六环边界的关系自动选择规划模式，调用方不传入规划模式或通行口。
+        成功响应始终包含可直接绘制的完整参考几何；跨界路线同时返回选中的有向通行口和环内安全路段。
       requestBody:
         required: true
         content:
@@ -24,7 +28,7 @@ paths:
               $ref: '#/components/schemas/RouteRequest'
       responses:
         '200':
-          description: 已通过独立安全校验的路线
+          description: 已通过独立安全校验并包含六环规划语义的路线
           content:
             application/json:
               schema:
@@ -38,7 +42,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '422':
-          description: 起点或终点不在当前路网支持范围
+          description: 起点或终点不在当前路网支持范围，或位于尚未冻结归类规则的六环边界带
           content:
             application/json:
               schema:
@@ -244,9 +248,20 @@ components:
     RouteResponse:
       type: object
       additionalProperties: false
+      description: |
+        planningMode 是模式判别字段。INTERNAL_SAFE 时 safeSegment 非空；
+        CROSS_BOUNDARY_OUTBOUND 和 CROSS_BOUNDARY_INBOUND 时 boundaryDirection、
+        boundaryCrossing、safeSegment、referenceSegment 均非空；EXTERNAL_ONLY 时
+        safeSegment 为空且 referenceSegment 为完整参考路线。geometry 始终为完整参考几何。
       required:
         - routeId
         - coordinateSystem
+        - planningMode
+        - boundaryVersion
+        - boundaryDirection
+        - boundaryCrossing
+        - safeSegment
+        - referenceSegment
         - distanceMeters
         - durationSeconds
         - cameraConflictCount
@@ -259,6 +274,35 @@ components:
           type: string
         coordinateSystem:
           $ref: '#/components/schemas/CoordinateSystem'
+        planningMode:
+          $ref: '#/components/schemas/RoutePlanningMode'
+        boundaryVersion:
+          type: string
+          description: 本次内外分类和通行口提取使用的六环边界版本。
+        boundaryDirection:
+          type: string
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/BoundaryDirection'
+          description: 仅跨界模式非空。
+        boundaryCrossing:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/BoundaryCrossing'
+          description: 仅跨界模式非空，表示最终选中的有向边界通行口。
+        safeSegment:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/RouteSegment'
+          description: 六环内受摄像头约束的合规路段；EXTERNAL_ONLY 时为空。
+        referenceSegment:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/RouteSegment'
+          description: 六环外参考路段；INTERNAL_SAFE 时为空。
         distanceMeters:
           type: number
           format: double
@@ -284,6 +328,63 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/RouteStep'
+    RoutePlanningMode:
+      type: string
+      enum:
+        - INTERNAL_SAFE
+        - CROSS_BOUNDARY_OUTBOUND
+        - CROSS_BOUNDARY_INBOUND
+        - EXTERNAL_ONLY
+    BoundaryDirection:
+      type: string
+      enum: [OUTBOUND, INBOUND]
+    BoundaryRole:
+      type: string
+      description: OUTER_EXIT 用于出环，INNER_ENTRY 用于入环。
+      enum: [OUTER_EXIT, INNER_ENTRY]
+    BoundaryCrossing:
+      type: object
+      additionalProperties: false
+      required:
+        - portalId
+        - direction
+        - boundaryRole
+        - wgs84
+        - gcj02
+      properties:
+        portalId:
+          type: string
+          description: 当前路网和边界版本中的不透明通行口标识，不保证跨路网版本稳定。
+        roadName:
+          type: string
+          nullable: true
+        direction:
+          $ref: '#/components/schemas/BoundaryDirection'
+        boundaryRole:
+          $ref: '#/components/schemas/BoundaryRole'
+        wgs84:
+          $ref: '#/components/schemas/OutputCoordinate'
+        gcj02:
+          $ref: '#/components/schemas/OutputCoordinate'
+    RouteSegment:
+      type: object
+      additionalProperties: false
+      required: [distanceMeters, durationSeconds, geometry]
+      properties:
+        distanceMeters:
+          type: number
+          format: double
+          minimum: 0
+        durationSeconds:
+          type: integer
+          format: int64
+          minimum: 0
+        geometry:
+          type: array
+          minItems: 2
+          description: 坐标系与 RouteResponse.coordinateSystem 一致。
+          items:
+            $ref: '#/components/schemas/OutputCoordinate'
     RouteStep:
       type: object
       additionalProperties: false
@@ -437,12 +538,14 @@ components:
     ReadinessResponse:
       type: object
       additionalProperties: false
-      required: [status, graphLoaded, cameraSnapshotLoaded, blockedEdgesLoaded]
+      required: [status, graphLoaded, sixthRingTopologyLoaded, cameraSnapshotLoaded, blockedEdgesLoaded]
       properties:
         status:
           type: string
           enum: [READY, NOT_READY]
         graphLoaded:
+          type: boolean
+        sixthRingTopologyLoaded:
           type: boolean
         cameraSnapshotLoaded:
           type: boolean
@@ -478,6 +581,11 @@ components:
         - START_IN_RESTRICTED_AREA
         - END_IN_RESTRICTED_AREA
         - NO_COMPLIANT_ROUTE
+        - ROUTE_SEARCH_TIMEOUT
+        - ROUTE_SEARCH_RESOURCE_LIMIT
+        - SIXTH_RING_TOPOLOGY_NOT_READY
+        - SIXTH_RING_BOUNDARY_AMBIGUOUS
+        - REFERENCE_ROUTE_FAILED
         - ROUTE_CONFLICT_DETECTED
         - ROUTING_NOT_READY
         - CAMERA_SNAPSHOT_NOT_READY

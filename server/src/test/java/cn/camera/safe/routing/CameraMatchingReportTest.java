@@ -5,6 +5,7 @@ import cn.camera.safe.camera.CameraLoadResult;
 import cn.camera.safe.camera.CameraPoint;
 import cn.camera.safe.camera.CameraSnapshot;
 import cn.camera.safe.config.AppProperties;
+import cn.camera.safe.config.RoutingProfileMode;
 import cn.camera.safe.coordinate.CoordinateConverter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -143,6 +144,8 @@ class CameraMatchingReportTest {
                 new AppProperties.Routing(
                         pbf.toString(),
                         temporaryDirectory.resolve("graph-cache").toString(),
+                        temporaryDirectory.resolve("candidate-graph-cache").toString(),
+                        RoutingProfileMode.CURRENT,
                         REPORT_RADIUS_METERS,
                         2,
                         4,

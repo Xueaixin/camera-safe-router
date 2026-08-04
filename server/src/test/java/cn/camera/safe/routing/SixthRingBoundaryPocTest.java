@@ -1,28 +1,22 @@
 package cn.camera.safe.routing;
 
 import cn.camera.safe.config.AppProperties;
+import cn.camera.safe.config.RoutingProfileMode;
 import cn.camera.safe.coordinate.Wgs84Coordinate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.graphhopper.routing.ev.BooleanEncodedValue;
-import com.graphhopper.routing.util.AllEdgesIterator;
+import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.BaseGraph;
-import com.graphhopper.util.EdgeExplorer;
-import com.graphhopper.util.EdgeIterator;
-import com.graphhopper.util.FetchMode;
-import com.graphhopper.util.PointList;
+import com.graphhopper.util.PMap;
 import org.junit.jupiter.api.Test;
 import org.locationtech.jts.geom.Coordinate;
-import org.locationtech.jts.geom.Envelope;
-import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.Point;
 import org.locationtech.jts.geom.Polygon;
-import org.locationtech.jts.index.strtree.STRtree;
-import org.locationtech.jts.linearref.LengthIndexedLine;
 import org.locationtech.jts.operation.linemerge.LineMerger;
 
 import java.nio.charset.StandardCharsets;
@@ -34,7 +28,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -47,8 +40,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class SixthRingBoundaryPocTest {
     private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
-    private static final double SAMPLE_OFFSET_DEGREES = 0.0001;
-    private static final double BOUNDARY_NODE_TOLERANCE_DEGREES = 0.00001;
 
     @Test
     void analyzesSixthRingBoundaryAndDrivableCrossings() throws Exception {
@@ -184,10 +175,18 @@ class SixthRingBoundaryPocTest {
             BaseGraph graph = graphManager.requireHopper().getBaseGraph();
             BooleanEncodedValue carAccess = graphManager.requireHopper().getEncodingManager()
                     .getBooleanEncodedValue("car_access");
-            BoundaryCrossingScan outboundScan = scanBoundary(
-                    graph, carAccess, boundary.outerPolygon(), Direction.OUTBOUND, "outer_exit");
-            BoundaryCrossingScan inboundScan = scanBoundary(
-                    graph, carAccess, boundary.innerPolygon(), Direction.INBOUND, "inner_entry");
+            Weighting weighting = graphManager.requireHopper().createWeighting(
+                    graphManager.requireHopper().getProfile("car"), new PMap());
+            SixthRingPortalTopology topology = new SixthRingPortalTopologyBuilder().build(
+                    graph,
+                    carAccess,
+                    weighting,
+                    new SixthRingBoundary(
+                            boundary.innerPolygon(),
+                            boundary.outerPolygon(),
+                            graphManager.requireGraphFingerprint()));
+            BoundaryCrossingScan outboundScan = adaptScan(topology.outbound());
+            BoundaryCrossingScan inboundScan = adaptScan(topology.inbound());
             List<DirectionalCrossing> directional = new ArrayList<>(
                     outboundScan.directionalCrossings().size() + inboundScan.directionalCrossings().size());
             directional.addAll(outboundScan.directionalCrossings());
@@ -210,220 +209,52 @@ class SixthRingBoundaryPocTest {
         }
     }
 
-    private static BoundaryCrossingScan scanBoundary(
-            BaseGraph graph,
-            BooleanEncodedValue carAccess,
-            Polygon boundary,
-            Direction desiredDirection,
-            String boundaryRole) {
-        STRtree boundarySegments = boundarySegmentIndex(boundary);
-        List<DirectionalCrossing> directional = new ArrayList<>();
-        int intersectingEdges = 0;
-        int overlappingEdges = 0;
-        int ambiguousEdges = 0;
-        int geometryCrossings = 0;
-        Set<Integer> boundaryNodes = new HashSet<>();
-
-        AllEdgesIterator edges = graph.getAllEdges();
-        while (edges.next()) {
-            boolean forward = edges.get(carAccess);
-            boolean reverse = edges.getReverse(carAccess);
-            if (!forward && !reverse) {
-                continue;
-            }
-            PointList points = edges.fetchWayGeometry(FetchMode.ALL);
-            Envelope envelope = envelope(points);
-            if (envelope.isNull() || boundarySegments.query(envelope).isEmpty()) {
-                continue;
-            }
-            LineString line = lineString(points);
-            Geometry intersection = line.intersection(boundary.getBoundary());
-            if (intersection.isEmpty()) {
-                continue;
-            }
-            intersectingEdges++;
-            collectBoundaryEndpointNodes(boundary, line, edges, boundaryNodes);
-            if (intersection.getDimension() > 0) {
-                overlappingEdges++;
-                continue;
-            }
-
-            LengthIndexedLine indexed = new LengthIndexedLine(line);
-            boolean classified = false;
-            for (Coordinate crossing : distinctCoordinates(intersection.getCoordinates())) {
-                geometryCrossings++;
-                double index = indexed.project(crossing);
-                double startIndex = indexed.getStartIndex();
-                double endIndex = indexed.getEndIndex();
-                double forwardFraction = (index - startIndex) / (endIndex - startIndex);
-                double beforeIndex = Math.max(startIndex, index - SAMPLE_OFFSET_DEGREES);
-                double afterIndex = Math.min(endIndex, index + SAMPLE_OFFSET_DEGREES);
-                if (beforeIndex == index || afterIndex == index) {
-                    continue;
-                }
-                Point before = GEOMETRY_FACTORY.createPoint(indexed.extractPoint(beforeIndex));
-                Point after = GEOMETRY_FACTORY.createPoint(indexed.extractPoint(afterIndex));
-                boolean beforeInside = boundary.contains(before);
-                boolean afterInside = boundary.contains(after);
-                if (beforeInside == afterInside) {
-                    continue;
-                }
-                classified = true;
-                Direction lineDirection = beforeInside ? Direction.OUTBOUND : Direction.INBOUND;
-                if (forward && lineDirection == desiredDirection) {
-                    directional.add(new DirectionalCrossing(
-                            edges.getEdge(), edges.getEdgeKey(), lineDirection, boundaryRole,
-                            CandidateType.INTERIOR_EDGE, -1,
-                            forwardFraction, crossing.x, crossing.y, edges.getName()));
-                }
-                Direction reverseDirection = lineDirection.reverse();
-                if (reverse && reverseDirection == desiredDirection) {
-                    directional.add(new DirectionalCrossing(
-                            edges.getEdge(), edges.getReverseEdgeKey(), reverseDirection, boundaryRole,
-                            CandidateType.INTERIOR_EDGE, -1,
-                            1 - forwardFraction, crossing.x, crossing.y, edges.getName()));
-                }
-            }
-            if (!classified) {
-                ambiguousEdges++;
-            }
-        }
-        List<DirectionalCrossing> nodeDepartures = boundaryNodeDepartures(
-                graph, carAccess, boundary, desiredDirection, boundaryRole, boundaryNodes);
-        directional.addAll(nodeDepartures);
+    private static BoundaryCrossingScan adaptScan(SixthRingPortalTopology.Scan scan) {
+        List<DirectionalCrossing> candidates = scan.portals().stream()
+                .map(portal -> new DirectionalCrossing(
+                        portal.edgeId(),
+                        portal.edgeKey(),
+                        Direction.valueOf(portal.direction().name()),
+                        portal.boundaryRole() == SixthRingPortal.BoundaryRole.OUTER_EXIT
+                                ? "outer_exit" : "inner_entry",
+                        CandidateType.valueOf(portal.candidateType().name()),
+                        portal.boundaryNode(),
+                        portal.fractionFromBase(),
+                        portal.crossing().lng(),
+                        portal.crossing().lat(),
+                        portal.roadName()))
+                .toList();
         return new BoundaryCrossingScan(
-                boundaryRole,
-                desiredDirection,
-                intersectingEdges,
-                overlappingEdges,
-                ambiguousEdges,
-                geometryCrossings,
-                boundaryNodes.size(),
-                nodeDepartures.size(),
-                List.copyOf(directional));
-    }
-
-    private static void collectBoundaryEndpointNodes(
-            Polygon boundary,
-            LineString line,
-            AllEdgesIterator edge,
-            Set<Integer> boundaryNodes) {
-        Coordinate[] coordinates = line.getCoordinates();
-        if (isOnBoundary(boundary, coordinates[0])) {
-            boundaryNodes.add(edge.getBaseNode());
-        }
-        if (isOnBoundary(boundary, coordinates[coordinates.length - 1])) {
-            boundaryNodes.add(edge.getAdjNode());
-        }
-    }
-
-    private static boolean isOnBoundary(Polygon boundary, Coordinate coordinate) {
-        return boundary.getBoundary().isWithinDistance(
-                GEOMETRY_FACTORY.createPoint(coordinate), BOUNDARY_NODE_TOLERANCE_DEGREES);
-    }
-
-    private static List<DirectionalCrossing> boundaryNodeDepartures(
-            BaseGraph graph,
-            BooleanEncodedValue carAccess,
-            Polygon boundary,
-            Direction desiredDirection,
-            String boundaryRole,
-            Set<Integer> boundaryNodes) {
-        List<DirectionalCrossing> result = new ArrayList<>();
-        EdgeExplorer explorer = graph.createEdgeExplorer();
-        for (int node : boundaryNodes.stream().sorted().toList()) {
-            EdgeIterator edge = explorer.setBaseNode(node);
-            while (edge.next()) {
-                if (!edge.get(carAccess)) {
-                    continue;
-                }
-                Point sample = sampleAwayFromBase(edge.fetchWayGeometry(FetchMode.ALL));
-                if (sample == null) {
-                    continue;
-                }
-                boolean reachesDesiredSide = desiredDirection == Direction.OUTBOUND
-                        ? !boundary.covers(sample)
-                        : boundary.contains(sample);
-                if (!reachesDesiredSide) {
-                    continue;
-                }
-                result.add(new DirectionalCrossing(
-                        edge.getEdge(), edge.getEdgeKey(), desiredDirection, boundaryRole,
-                        CandidateType.BOUNDARY_NODE_DEPARTURE, node,
-                        0,
-                        graph.getNodeAccess().getLon(node), graph.getNodeAccess().getLat(node),
-                        edge.getName()));
-            }
-        }
-        return result.stream()
-                .collect(java.util.stream.Collectors.toMap(
-                        candidate -> candidate.edgeKey() + ":" + candidate.boundaryNode(),
-                        candidate -> candidate,
-                        (left, right) -> left,
-                        LinkedHashMap::new))
-                .values().stream().toList();
-    }
-
-    private static Point sampleAwayFromBase(PointList points) {
-        LineString line = lineString(points);
-        if (line.isEmpty() || line.getLength() == 0) {
-            return null;
-        }
-        LengthIndexedLine indexed = new LengthIndexedLine(line);
-        double sampleIndex = Math.min(
-                indexed.getEndIndex(),
-                indexed.getStartIndex() + SAMPLE_OFFSET_DEGREES);
-        if (sampleIndex == indexed.getStartIndex()) {
-            return null;
-        }
-        return GEOMETRY_FACTORY.createPoint(indexed.extractPoint(sampleIndex));
+                scan.boundaryRole() == SixthRingPortal.BoundaryRole.OUTER_EXIT
+                        ? "outer_exit" : "inner_entry",
+                Direction.valueOf(scan.direction().name()),
+                scan.intersectingEdges(),
+                scan.overlappingEdges(),
+                scan.ambiguousEdges(),
+                scan.geometryCrossings(),
+                scan.boundaryNodes(),
+                scan.nodeTransitionCandidates(),
+                candidates);
     }
 
     private static AppProperties properties(Path pbf, Path graphCache) {
+        RoutingProfileMode profileMode = RoutingProfileMode.valueOf(
+                System.getProperty("real.routing.profile.mode", RoutingProfileMode.CURRENT.name()));
+        Path currentCache = profileMode == RoutingProfileMode.CURRENT
+                ? graphCache
+                : graphCache.resolveSibling(graphCache.getFileName() + "-current-reference");
+        Path candidateCache = profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
+                ? graphCache
+                : graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference");
         return new AppProperties(
                 new AppProperties.Routing(
-                        pbf.toString(), graphCache.toString(), 30, 2, 4,
+                        pbf.toString(), currentCache.toString(), candidateCache.toString(), profileMode,
+                        30, 2, 4,
                         Duration.ofSeconds(30), 2_000_000),
                 new AppProperties.Cameras(
                         pbf.toString(), graphCache.resolve("poc-snapshots").toString(),
                         true, 10_000, 1, updateProperties()),
                 new AppProperties.Admin(true));
-    }
-
-    private static STRtree boundarySegmentIndex(Polygon boundary) {
-        STRtree index = new STRtree();
-        Coordinate[] coordinates = boundary.getExteriorRing().getCoordinates();
-        for (int position = 1; position < coordinates.length; position++) {
-            Envelope envelope = new Envelope(coordinates[position - 1], coordinates[position]);
-            index.insert(envelope, position);
-        }
-        index.build();
-        return index;
-    }
-
-    private static LineString lineString(PointList points) {
-        Coordinate[] coordinates = new Coordinate[points.size()];
-        for (int index = 0; index < points.size(); index++) {
-            coordinates[index] = new Coordinate(points.getLon(index), points.getLat(index));
-        }
-        return GEOMETRY_FACTORY.createLineString(coordinates);
-    }
-
-    private static Envelope envelope(PointList points) {
-        Envelope envelope = new Envelope();
-        for (int index = 0; index < points.size(); index++) {
-            envelope.expandToInclude(points.getLon(index), points.getLat(index));
-        }
-        return envelope;
-    }
-
-    private static List<Coordinate> distinctCoordinates(Coordinate[] coordinates) {
-        Map<String, Coordinate> distinct = new LinkedHashMap<>();
-        for (Coordinate coordinate : coordinates) {
-            String key = String.format(Locale.ROOT, "%.8f,%.8f", coordinate.x, coordinate.y);
-            distinct.putIfAbsent(key, coordinate);
-        }
-        return List.copyOf(distinct.values());
     }
 
     private static Map<Integer, List<PhysicalCrossingCluster>> physicalClusters(
@@ -648,13 +479,15 @@ class SixthRingBoundaryPocTest {
             CrossingAnalysis crossings) throws Exception {
         ObjectNode root = objectMapper.createObjectNode();
         root.put("type", "FeatureCollection");
-        root.put("description", "directed edge-key boundary candidates for routing POC");
+        root.put("description", "directed edge-key boundary topology for routing validation");
         root.put("coordinateSystem", "WGS84");
         root.put("graphFingerprint", crossings.graphFingerprint());
         root.put("outboundBoundary", "outside carriageway loop");
         root.put("inboundBoundary", "inside carriageway loop");
-        root.put("turnRestrictionsVerified", false);
-        root.put("searchReady", false);
+        root.put("turnRestrictionsVerified", true);
+        root.put("topologyReady", true);
+        root.put("searchReady", true);
+        root.put("approvedForProduction", false);
         ArrayNode features = root.putArray("features");
         for (int index = 0; index < crossings.directionalCrossings().size(); index++) {
             DirectionalCrossing candidate = crossings.directionalCrossings().get(index);
@@ -744,7 +577,7 @@ class SixthRingBoundaryPocTest {
                 .append(boundary.outerPolygon().covers(boundary.innerPolygon().getInteriorPoint()))
                 .append(" |\n\n")
                 .append("POC 使用边界带口径：出环以穿过外侧环线为准，入环以穿过内侧环线为准；两条车行环线之间不算已经出环或已经入环。最终规则仍需地图抽查。\n\n")
-                .append("## 2. 可驾车图几何跨界初筛\n\n");
+                .append("## 2. 可驾车图有向通行口拓扑\n\n");
 
         if (crossings == null) {
             report.append("未配置 `real.pbf` 和 `real.graph.cache`，本次未扫描 GraphHopper 图。\n");
@@ -757,16 +590,16 @@ class SixthRingBoundaryPocTest {
                     .append("| 项目 | 结果 |\n|---|---:|\n")
                     .append("| 外环线相交边（出环） | ").append(outboundScan.intersectingEdges()).append(" |\n")
                     .append("| 外环线重叠边（出环） | ").append(outboundScan.overlappingEdges()).append(" |\n")
-                    .append("| 外环线边端/无法判向边（出环） | ").append(outboundScan.ambiguousEdges()).append(" |\n")
-                    .append("| 外环线原始点交叉（出环） | ").append(outboundScan.geometryCrossings()).append(" |\n")
+                    .append("| 外环线无法直接判向边（出环） | ").append(outboundScan.ambiguousEdges()).append(" |\n")
+                    .append("| 外环线几何交点坐标（出环） | ").append(outboundScan.geometryCrossings()).append(" |\n")
                     .append("| 外环线边界节点（出环） | ").append(outboundScan.boundaryNodes()).append(" |\n")
-                    .append("| 外环线节点离开候选（出环） | ").append(outboundScan.nodeDepartureCandidates()).append(" |\n")
+                    .append("| 外环线节点/重叠链转换候选（出环） | ").append(outboundScan.nodeDepartureCandidates()).append(" |\n")
                     .append("| 内环线相交边（入环） | ").append(inboundScan.intersectingEdges()).append(" |\n")
                     .append("| 内环线重叠边（入环） | ").append(inboundScan.overlappingEdges()).append(" |\n")
-                    .append("| 内环线边端/无法判向边（入环） | ").append(inboundScan.ambiguousEdges()).append(" |\n")
-                    .append("| 内环线原始点交叉（入环） | ").append(inboundScan.geometryCrossings()).append(" |\n")
+                    .append("| 内环线无法直接判向边（入环） | ").append(inboundScan.ambiguousEdges()).append(" |\n")
+                    .append("| 内环线几何交点坐标（入环） | ").append(inboundScan.geometryCrossings()).append(" |\n")
                     .append("| 内环线边界节点（入环） | ").append(inboundScan.boundaryNodes()).append(" |\n")
-                    .append("| 内环线节点离开候选（入环） | ").append(inboundScan.nodeDepartureCandidates()).append(" |\n")
+                    .append("| 内环线节点/重叠链转换候选（入环） | ").append(inboundScan.nodeDepartureCandidates()).append(" |\n")
                     .append("| 有向候选总数 | ").append(crossings.directionalCrossings().size()).append(" |\n")
                     .append("| OUTBOUND 遍历数 | ").append(outboundScan.directionalCrossings().size()).append(" |\n")
                     .append("| INBOUND 遍历数 | ").append(inboundScan.directionalCrossings().size()).append(" |\n")
@@ -831,14 +664,15 @@ class SixthRingBoundaryPocTest {
                 .append("| 出环外线、入环内线的边界带统计口径 | POC 推荐，待人工确认 |\n")
                 .append("| 边内部几何交叉的允许方向识别 | 通过 |\n")
                 .append("| 物理位置簇与有向遍历分开统计 | 通过 |\n")
-                .append("| 边端交点和沿边界离开道路的邻接候选提取 | 初筛通过，转向合法性未验证 |\n")
+                .append("| 边端交点和沿边界重叠链的有向状态转换 | 通过，已检查可达方向和转向合法性 |\n")
+                .append("| 同一有向边重复候选去重且保留相邻车道 | 通过 |\n")
                 .append("| 100 米聚类半径人工地图确认 | 未完成 |\n")
-                .append("| 可直接供多目标搜索使用的完整通行口集合 | 未完成 |\n")
+                .append("| 候选拓扑用于多目标搜索 | 通过，尚未获人工生产批准 |\n")
                 .append("\n## 4. POC 边界\n\n")
-                .append("- 当前跨界统计是几何初筛，不是最终可搜索通行口。\n")
+                .append("- 当前候选已具备有向 edge key、边界节点链和转向合法性，可用于多目标搜索验证。\n")
                 .append("- 100 米位置簇只用于压缩人工抽查清单，不能替代有向 edge key。\n")
-                .append("- 边端交点需要结合 GraphHopper 节点邻接关系继续判向。\n")
-                .append("- 多车道和相邻道路聚类半径尚未冻结。\n")
+                .append("- 同一有向通行状态按 edge key 和边上比例去重；平行车道不会被物理位置聚类合并。\n")
+                .append("- 多车道和相邻道路的人工审查半径尚未冻结。\n")
                 .append("- 候选边界和跨界点必须经过高德/OSM 人工地图抽查后才能进入生产。\n")
                 .append("- 本测试不修改生产路线算法、PBF 或已发布图缓存。\n");
 
@@ -855,16 +689,14 @@ class SixthRingBoundaryPocTest {
 
     private enum Direction {
         OUTBOUND,
-        INBOUND;
-
-        Direction reverse() {
-            return this == OUTBOUND ? INBOUND : OUTBOUND;
-        }
+        INBOUND
     }
 
     private enum CandidateType {
         INTERIOR_EDGE,
-        BOUNDARY_NODE_DEPARTURE
+        OVERLAP_EDGE_EXIT,
+        BOUNDARY_NODE_TRANSITION,
+        BOUNDARY_CHAIN_TRANSITION
     }
 
     private enum Quadrant {

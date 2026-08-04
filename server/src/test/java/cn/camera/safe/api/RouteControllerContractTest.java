@@ -1,7 +1,12 @@
 package cn.camera.safe.api;
 
+import cn.camera.safe.api.model.BoundaryCrossing;
+import cn.camera.safe.api.model.BoundaryDirection;
+import cn.camera.safe.api.model.BoundaryRole;
 import cn.camera.safe.api.model.OutputCoordinate;
+import cn.camera.safe.api.model.RoutePlanningMode;
 import cn.camera.safe.api.model.RouteResponse;
+import cn.camera.safe.api.model.RouteSegment;
 import cn.camera.safe.application.RoutePlanningService;
 import cn.camera.safe.coordinate.CoordinateSystem;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -17,6 +22,7 @@ import org.springframework.http.converter.json.MappingJackson2HttpMessageConvert
 import java.util.List;
 
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -44,8 +50,30 @@ class RouteControllerContractTest {
 
     @Test
     void returnsTheFrozenSuccessfulRouteShape() throws Exception {
+        List<OutputCoordinate> safeGeometry = List.of(
+                new OutputCoordinate(116.39, 39.9),
+                new OutputCoordinate(116.40, 39.905));
+        List<OutputCoordinate> referenceGeometry = List.of(
+                new OutputCoordinate(116.40, 39.905),
+                new OutputCoordinate(116.41, 39.91));
         when(service.plan(any())).thenReturn(new RouteResponse(
-                "route-1", CoordinateSystem.GCJ02, 1_000.5, 120, 0,
+                "route-1",
+                CoordinateSystem.GCJ02,
+                RoutePlanningMode.CROSS_BOUNDARY_OUTBOUND,
+                "sixth-ring-v1",
+                BoundaryDirection.OUTBOUND,
+                new BoundaryCrossing(
+                        "P0001",
+                        "六环路",
+                        BoundaryDirection.OUTBOUND,
+                        BoundaryRole.OUTER_EXIT,
+                        new OutputCoordinate(116.399, 39.904),
+                        new OutputCoordinate(116.405, 39.905)),
+                new RouteSegment(400.5, 45, safeGeometry),
+                new RouteSegment(600, 75, referenceGeometry),
+                1_000.5,
+                120,
+                0,
                 "camera-v1", "blocked-v1",
                 List.of(new OutputCoordinate(116.39, 39.9), new OutputCoordinate(116.41, 39.91)),
                 List.of()));
@@ -56,11 +84,50 @@ class RouteControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.routeId").value("route-1"))
                 .andExpect(jsonPath("$.coordinateSystem").value("GCJ02"))
+                .andExpect(jsonPath("$.planningMode").value("CROSS_BOUNDARY_OUTBOUND"))
+                .andExpect(jsonPath("$.boundaryVersion").value("sixth-ring-v1"))
+                .andExpect(jsonPath("$.boundaryDirection").value("OUTBOUND"))
+                .andExpect(jsonPath("$.boundaryCrossing.portalId").value("P0001"))
+                .andExpect(jsonPath("$.boundaryCrossing.wgs84.lng").value(116.399))
+                .andExpect(jsonPath("$.boundaryCrossing.gcj02.lng").value(116.405))
+                .andExpect(jsonPath("$.safeSegment.geometry.length()").value(2))
+                .andExpect(jsonPath("$.referenceSegment.geometry.length()").value(2))
                 .andExpect(jsonPath("$.cameraConflictCount").value(0))
                 .andExpect(jsonPath("$.cameraSnapshotVersion").value("camera-v1"))
                 .andExpect(jsonPath("$.blockedEdgeVersion").value("blocked-v1"))
                 .andExpect(jsonPath("$.geometry.length()").value(2))
                 .andExpect(jsonPath("$.steps").isArray());
+    }
+
+    @Test
+    void includesRequiredNullableFieldsForInternalRoutes() throws Exception {
+        List<OutputCoordinate> geometry = List.of(
+                new OutputCoordinate(116.39, 39.9),
+                new OutputCoordinate(116.41, 39.91));
+        when(service.plan(any())).thenReturn(new RouteResponse(
+                "route-2",
+                CoordinateSystem.GCJ02,
+                RoutePlanningMode.INTERNAL_SAFE,
+                "sixth-ring-v1",
+                null,
+                null,
+                new RouteSegment(1_000.5, 120, geometry),
+                null,
+                1_000.5,
+                120,
+                0,
+                "camera-v1",
+                "blocked-v1",
+                geometry,
+                List.of()));
+
+        mvc.perform(post("/api/v1/routes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validRequest()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.boundaryDirection").value(nullValue()))
+                .andExpect(jsonPath("$.boundaryCrossing").value(nullValue()))
+                .andExpect(jsonPath("$.referenceSegment").value(nullValue()));
     }
 
     @Test

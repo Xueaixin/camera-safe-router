@@ -19,8 +19,10 @@ $resolvedDataRoot = [System.IO.Path]::GetFullPath($DataRoot)
 $directories = @(
     $resolvedDataRoot,
     (Join-Path $resolvedDataRoot 'osm'),
+    (Join-Path $resolvedDataRoot 'boundaries'),
     (Join-Path $resolvedDataRoot 'cameras'),
     (Join-Path $resolvedDataRoot 'graph-cache\jingjinji'),
+    (Join-Path $resolvedDataRoot 'graph-cache\jingjinji-compliant-distance-v1'),
     (Join-Path $resolvedDataRoot 'snapshots'),
     (Join-Path $resolvedDataRoot 'downloads\cameras'),
     (Join-Path $resolvedDataRoot 'work\cameras\failed'),
@@ -35,9 +37,10 @@ foreach ($directory in $directories) {
 [PSCustomObject]@{
     DataRoot = $resolvedDataRoot
     JingjinjiPbf = Join-Path $resolvedDataRoot 'osm\jingjinji-latest.osm.pbf'
+    SixthRingBoundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary.geojson'
     CameraJson = Join-Path $resolvedDataRoot 'cameras\camera.json'
     CameraBackups = Join-Path $resolvedDataRoot 'backups\cameras'
-    GraphCache = Join-Path $resolvedDataRoot 'graph-cache\jingjinji'
+    GraphCache = Join-Path $resolvedDataRoot 'graph-cache\jingjinji-compliant-distance-v1'
     Snapshots = Join-Path $resolvedDataRoot 'snapshots'
     LogFile = Join-Path $resolvedDataRoot 'logs\camera-safe-routing-server.log'
 } | Format-List

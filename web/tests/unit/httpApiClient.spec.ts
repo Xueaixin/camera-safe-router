@@ -20,6 +20,7 @@ describe('HTTP API client', () => {
         response(503, {
           status: 'NOT_READY',
           graphLoaded: true,
+          sixthRingTopologyLoaded: true,
           cameraSnapshotLoaded: false,
           blockedEdgesLoaded: false,
           reason: '摄像头快照正在加载',
@@ -32,6 +33,7 @@ describe('HTTP API client', () => {
     expect(readiness).toEqual({
       status: 'NOT_READY',
       graphLoaded: true,
+      sixthRingTopologyLoaded: true,
       cameraSnapshotLoaded: false,
       blockedEdgesLoaded: false,
       reason: '摄像头快照正在加载',

@@ -6,6 +6,7 @@ import cn.camera.safe.application.CameraRefreshService;
 import cn.camera.safe.camera.update.CameraUpdateService;
 import cn.camera.safe.routing.GraphHopperManager;
 import cn.camera.safe.routing.RoutingSnapshotManager;
+import cn.camera.safe.routing.SixthRingRoutingManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ class AdminRefreshControllerTest {
         OperationsController controller = new OperationsController(
                 mock(GraphHopperManager.class),
                 mock(RoutingSnapshotManager.class),
+                mock(SixthRingRoutingManager.class),
                 refreshService,
                 updateService,
                 new AdminAccessGuard(properties()),

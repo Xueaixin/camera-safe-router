@@ -2,18 +2,18 @@ package cn.camera.safe.routing;
 
 import cn.camera.safe.camera.CameraJsonLoader;
 import cn.camera.safe.config.AppProperties;
+import cn.camera.safe.config.RoutingProfileMode;
 import cn.camera.safe.coordinate.CoordinateConverter;
 import cn.camera.safe.coordinate.Wgs84Coordinate;
 import cn.camera.safe.validation.RouteSafetyValidator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.graphhopper.routing.ev.BooleanEncodedValue;
-import com.graphhopper.routing.ev.EnumEncodedValue;
-import com.graphhopper.routing.ev.RoadAccess;
 import com.graphhopper.routing.util.EdgeFilter;
 import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.BaseGraph;
 import com.graphhopper.storage.index.Snap;
+import com.graphhopper.util.PMap;
 import com.graphhopper.util.EdgeIteratorState;
 import com.graphhopper.util.FetchMode;
 import com.graphhopper.util.PointList;
@@ -80,23 +80,24 @@ class SixthRingMultiTargetSearchPocTest {
             BaseGraph graph = hopper.getBaseGraph();
             BooleanEncodedValue carAccess = hopper.getEncodingManager()
                     .getBooleanEncodedValue("car_access");
-            EnumEncodedValue<RoadAccess> roadAccess = hopper.getEncodingManager()
-                    .getEnumEncodedValue(RoadAccess.KEY, RoadAccess.class);
             EdgeFilter snapFilter = edge -> edge.get(carAccess) || edge.getReverse(carAccess);
             Snap snap = hopper.getLocationIndex().findClosest(
                     INSIDE_CONTROL_POINT.lat(), INSIDE_CONTROL_POINT.lng(), snapFilter);
             assertThat(snap.isValid()).isTrue();
 
+            Weighting profileWeighting = hopper.createWeighting(
+                    hopper.getProfile("car"), new PMap());
+            assertThat(profileWeighting.hasTurnCosts()).isTrue();
             SearchMeasurement outbound = search(
                     graph,
-                    new CompliantDistanceWeighting(carAccess, roadAccess),
+                    new DistanceFirstLegalityWeighting(profileWeighting),
                     snapshot,
                     snap.getClosestNode(),
                     input.outbound(),
                     FORWARD);
             SearchMeasurement inbound = search(
                     graph,
-                    new CompliantDistanceWeighting(carAccess, roadAccess),
+                    new DistanceFirstLegalityWeighting(profileWeighting),
                     snapshot,
                     snap.getClosestNode(),
                     input.inbound(),
@@ -306,7 +307,7 @@ class SixthRingMultiTargetSearchPocTest {
                 .append("|---|---:|---:|---:|---:|---:|---|---:|\n");
         appendMeasurement(report, "OUTBOUND", input.outbound().size(), outbound);
         appendMeasurement(report, "INBOUND", input.inbound().size(), inbound);
-        report.append("\n当前图没有 turn costs，且本次 POC 使用保守的 `road_access=yes` 距离权重。因此结果只证明 edge-key 多目标搜索的规模、终止条件和摄像头硬约束，不代表生产路线基线。\n\n")
+        report.append("\n当前候选图已启用 turn costs。多目标搜索沿用候选 Profile 的可达性、OSM 禁转和 road_access 入口规则，同时按真实道路米数累计 Dmin，确保 1 公里容差保持业务单位。\n\n")
                 .append("## 入选候选\n\n")
                 .append("| 方向 | ID | 距离 | 类型 | WGS84 | 道路名 |\n")
                 .append("|---|---|---:|---|---|---|\n");
@@ -317,7 +318,7 @@ class SixthRingMultiTargetSearchPocTest {
                 .append("|---|---|---:|---:|---:|---|\n");
         appendReferenceOptions(report, outboundReferences);
         appendReferenceOptions(report, inboundReferences);
-        report.append("\n每个方向按完整参考距离选择表中第一名。这里的环外参考段仍使用当前 `car` Profile，只验证候选集内决胜流程和摄像头硬约束；距离优先与 road_access 修正后必须重跑。\n");
+        report.append("\n每个方向按完整参考距离选择表中第一名。环外参考段使用相同的候选 `car` Profile；结果仍需扩展到东南西北多组控制点并完成人工地图抽查。\n");
         Files.createDirectories(output.getParent());
         Files.writeString(output, report.toString(), StandardCharsets.UTF_8);
     }
@@ -377,9 +378,18 @@ class SixthRingMultiTargetSearchPocTest {
     }
 
     private static AppProperties properties(Path pbf, Path graphCache, Path cameraJson) {
+        RoutingProfileMode profileMode = RoutingProfileMode.valueOf(
+                System.getProperty("real.routing.profile.mode", RoutingProfileMode.CURRENT.name()));
+        Path currentCache = profileMode == RoutingProfileMode.CURRENT
+                ? graphCache
+                : graphCache.resolveSibling(graphCache.getFileName() + "-current-reference");
+        Path candidateCache = profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
+                ? graphCache
+                : graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference");
         return new AppProperties(
                 new AppProperties.Routing(
-                        pbf.toString(), graphCache.toString(), 30, 2, 4,
+                        pbf.toString(), currentCache.toString(), candidateCache.toString(), profileMode,
+                        30, 2, 4,
                         Duration.ofSeconds(30), 2_000_000),
                 new AppProperties.Cameras(
                         cameraJson.toString(), graphCache.resolve("poc-snapshots").toString(),
@@ -424,9 +434,7 @@ class SixthRingMultiTargetSearchPocTest {
             long outsideDurationMillis) {
     }
 
-    private record CompliantDistanceWeighting(
-            BooleanEncodedValue carAccess,
-            EnumEncodedValue<RoadAccess> roadAccess) implements Weighting {
+    private record DistanceFirstLegalityWeighting(Weighting delegate) implements Weighting {
 
         @Override
         public double calcMinWeightPerDistance() {
@@ -435,41 +443,34 @@ class SixthRingMultiTargetSearchPocTest {
 
         @Override
         public double calcEdgeWeight(EdgeIteratorState edgeState, boolean reverse) {
-            boolean accessible = reverse
-                    ? edgeState.getReverse(carAccess)
-                    : edgeState.get(carAccess);
-            RoadAccess access = reverse
-                    ? edgeState.getReverse(roadAccess)
-                    : edgeState.get(roadAccess);
-            return accessible && access == RoadAccess.YES
+            return Double.isFinite(delegate.calcEdgeWeight(edgeState, reverse))
                     ? edgeState.getDistance()
                     : Double.POSITIVE_INFINITY;
         }
 
         @Override
         public long calcEdgeMillis(EdgeIteratorState edgeState, boolean reverse) {
-            double weight = calcEdgeWeight(edgeState, reverse);
-            return Double.isFinite(weight) ? Math.round(weight) : Long.MAX_VALUE;
+            return delegate.calcEdgeMillis(edgeState, reverse);
         }
 
         @Override
         public double calcTurnWeight(int inEdge, int viaNode, int outEdge) {
-            return 0;
+            return delegate.calcTurnWeight(inEdge, viaNode, outEdge);
         }
 
         @Override
         public long calcTurnMillis(int inEdge, int viaNode, int outEdge) {
-            return 0;
+            return delegate.calcTurnMillis(inEdge, viaNode, outEdge);
         }
 
         @Override
         public boolean hasTurnCosts() {
-            return false;
+            return delegate.hasTurnCosts();
         }
 
         @Override
         public String getName() {
-            return "poc-compliant-distance";
+            return "poc-distance-first|" + delegate.getName();
         }
     }
 }

@@ -55,6 +55,7 @@ function apiWithList(listCameras: ApiClient['listCameras']): ApiClient {
     readiness: async () => ({
       status: 'READY',
       graphLoaded: true,
+      sixthRingTopologyLoaded: true,
       cameraSnapshotLoaded: true,
       blockedEdgesLoaded: true,
     }),

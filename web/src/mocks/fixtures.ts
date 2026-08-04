@@ -88,26 +88,37 @@ export function buildMockRoute(
       : { lng: coordinate.lng, lat: coordinate.lat };
   const start = displayCoordinate(request.start);
   const end = displayCoordinate(request.end);
+  const geometry = [
+    { lng: start.lng, lat: start.lat },
+    {
+      lng: start.lng + (end.lng - start.lng) * 0.32,
+      lat: start.lat + (end.lat - start.lat) * 0.25,
+    },
+    {
+      lng: start.lng + (end.lng - start.lng) * 0.67,
+      lat: start.lat + (end.lat - start.lat) * 0.72,
+    },
+    { lng: end.lng, lat: end.lat },
+  ];
   return {
     routeId,
     coordinateSystem: 'GCJ02',
+    planningMode: 'INTERNAL_SAFE',
+    boundaryVersion: 'fixture-sixth-ring-v1',
+    boundaryDirection: null,
+    boundaryCrossing: null,
+    safeSegment: {
+      distanceMeters: 12640.5,
+      durationSeconds: 1680,
+      geometry,
+    },
+    referenceSegment: null,
     distanceMeters: 12640.5,
     durationSeconds: 1680,
     cameraConflictCount: 0,
     cameraSnapshotVersion: 'fixture-camera-v1',
     blockedEdgeVersion: 'fixture-blocked-v1',
-    geometry: [
-      { lng: start.lng, lat: start.lat },
-      {
-        lng: start.lng + (end.lng - start.lng) * 0.32,
-        lat: start.lat + (end.lat - start.lat) * 0.25,
-      },
-      {
-        lng: start.lng + (end.lng - start.lng) * 0.67,
-        lat: start.lat + (end.lat - start.lat) * 0.72,
-      },
-      { lng: end.lng, lat: end.lat },
-    ],
+    geometry,
     steps: [
       {
         instruction: '向东行驶',
@@ -130,10 +141,17 @@ export function mockApiError(code: ApiErrorCode) {
     START_IN_RESTRICTED_AREA: '起点位于限制范围内',
     END_IN_RESTRICTED_AREA: '终点位于限制范围内',
     NO_COMPLIANT_ROUTE: '未找到能够避开当前限制点位的路线',
+    ROUTE_SEARCH_TIMEOUT: '路线搜索超时',
+    ROUTE_SEARCH_RESOURCE_LIMIT: '路线搜索达到资源上限',
+    SIXTH_RING_TOPOLOGY_NOT_READY: '六环路由拓扑尚未就绪',
+    SIXTH_RING_BOUNDARY_AMBIGUOUS: '起点或终点位于六环边界带',
+    REFERENCE_ROUTE_FAILED: '完整参考路线生成失败',
     ROUTE_CONFLICT_DETECTED: '路线安全校验发现冲突',
     ROUTING_NOT_READY: '路由服务尚未就绪',
     CAMERA_SNAPSHOT_NOT_READY: '摄像头快照尚未就绪',
     REFRESH_ALREADY_RUNNING: '快照刷新正在运行',
+    CAMERA_UPDATE_ALREADY_RUNNING: '摄像头数据更新正在运行',
+    CAMERA_UPDATE_FAILED: '摄像头数据更新失败',
     INTERNAL_ERROR: '服务暂时不可用',
   };
   return {

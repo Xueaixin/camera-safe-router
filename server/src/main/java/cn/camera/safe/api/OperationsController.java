@@ -10,6 +10,7 @@ import cn.camera.safe.config.AppProperties;
 import cn.camera.safe.routing.GraphHopperManager;
 import cn.camera.safe.routing.RoutingSnapshot;
 import cn.camera.safe.routing.RoutingSnapshotManager;
+import cn.camera.safe.routing.SixthRingRoutingManager;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +28,7 @@ public final class OperationsController {
 
     private final GraphHopperManager graphManager;
     private final RoutingSnapshotManager snapshotManager;
+    private final SixthRingRoutingManager sixthRingRoutingManager;
     private final CameraRefreshService refreshService;
     private final CameraUpdateService updateService;
     private final AdminAccessGuard adminAccessGuard;
@@ -35,12 +37,14 @@ public final class OperationsController {
     public OperationsController(
             GraphHopperManager graphManager,
             RoutingSnapshotManager snapshotManager,
+            SixthRingRoutingManager sixthRingRoutingManager,
             CameraRefreshService refreshService,
             CameraUpdateService updateService,
             AdminAccessGuard adminAccessGuard,
             AppProperties properties) {
         this.graphManager = graphManager;
         this.snapshotManager = snapshotManager;
+        this.sixthRingRoutingManager = sixthRingRoutingManager;
         this.refreshService = refreshService;
         this.updateService = updateService;
         this.adminAccessGuard = adminAccessGuard;
@@ -55,16 +59,19 @@ public final class OperationsController {
     @GetMapping("/readiness")
     public ResponseEntity<ReadinessResponse> readiness() {
         boolean graphLoaded = graphManager.isReady();
+        boolean sixthRingTopologyLoaded = sixthRingRoutingManager.isReady();
         RoutingSnapshot snapshot = snapshotManager.current().orElse(null);
         boolean cameraLoaded = snapshot != null;
         boolean blockedLoaded = snapshot != null
                 && snapshot.blockedEdges().cameraSnapshotVersion()
                 .equals(snapshot.cameraSnapshot().version());
-        boolean ready = graphLoaded && cameraLoaded && blockedLoaded;
-        String reason = ready ? null : notReadyReason(graphLoaded, cameraLoaded, blockedLoaded);
+        boolean ready = graphLoaded && sixthRingTopologyLoaded && cameraLoaded && blockedLoaded;
+        String reason = ready ? null : notReadyReason(
+                graphLoaded, sixthRingTopologyLoaded, cameraLoaded, blockedLoaded);
         ReadinessResponse response = new ReadinessResponse(
                 ready ? "READY" : "NOT_READY",
                 graphLoaded,
+                sixthRingTopologyLoaded,
                 cameraLoaded,
                 blockedLoaded,
                 reason);
@@ -87,10 +94,18 @@ public final class OperationsController {
         return updateService.updateNow();
     }
 
-    private String notReadyReason(boolean graphLoaded, boolean cameraLoaded, boolean blockedLoaded) {
+    private String notReadyReason(
+            boolean graphLoaded,
+            boolean sixthRingTopologyLoaded,
+            boolean cameraLoaded,
+            boolean blockedLoaded) {
         if (!graphLoaded) {
             String failure = graphManager.failureReason();
             return failure == null ? "路网正在加载" : "路网加载失败: " + failure;
+        }
+        if (!sixthRingTopologyLoaded) {
+            String failure = sixthRingRoutingManager.failureReason();
+            return failure == null ? "六环路由拓扑正在加载" : "六环路由拓扑加载失败: " + failure;
         }
         if (!properties.cameras().sourceCoordinateVerified()) {
             return "摄像头源坐标系尚未人工确认";

@@ -3,6 +3,7 @@ package cn.camera.safe.application;
 import cn.camera.safe.config.ExecutorConfiguration;
 import cn.camera.safe.routing.GraphHopperManager;
 import cn.camera.safe.routing.RoutingSnapshotManager;
+import cn.camera.safe.routing.SixthRingRoutingManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -18,14 +19,17 @@ public final class BackendInitializer {
 
     private final GraphHopperManager graphManager;
     private final RoutingSnapshotManager snapshotManager;
+    private final SixthRingRoutingManager sixthRingRoutingManager;
     private final ExecutorService executor;
 
     public BackendInitializer(
             GraphHopperManager graphManager,
             RoutingSnapshotManager snapshotManager,
+            SixthRingRoutingManager sixthRingRoutingManager,
             @Qualifier(ExecutorConfiguration.INITIALIZATION_EXECUTOR) ExecutorService executor) {
         this.graphManager = graphManager;
         this.snapshotManager = snapshotManager;
+        this.sixthRingRoutingManager = sixthRingRoutingManager;
         this.executor = executor;
     }
 
@@ -34,6 +38,7 @@ public final class BackendInitializer {
         executor.execute(() -> {
             try {
                 graphManager.initialize();
+                sixthRingRoutingManager.initialize();
                 snapshotManager.refreshNow();
             } catch (RuntimeException exception) {
                 LOGGER.error("后端初始化未完成 异常类型={} 错误信息={}",

@@ -2,9 +2,7 @@ package cn.camera.safe.routing;
 
 import cn.camera.safe.config.AppProperties;
 import cn.camera.safe.coordinate.Wgs84Coordinate;
-import com.graphhopper.config.Profile;
 import com.graphhopper.routing.ev.BooleanEncodedValue;
-import com.graphhopper.util.GHUtility;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,8 +19,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Component
 public final class GraphHopperManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(GraphHopperManager.class);
-    private static final String ENCODED_VALUES = "car_access|block_private=false,car_average_speed,road_access";
     private static final String SOURCE_HASH_FILE = "camera-safe-source.sha256";
+    private static final String CONFIGURATION_HASH_FILE = "camera-safe-routing-config.sha256";
 
     private final AppProperties properties;
     private final AtomicReference<GraphState> state = new AtomicReference<>(GraphState.NOT_STARTED);
@@ -30,6 +28,7 @@ public final class GraphHopperManager {
     private volatile HardAvoidingGraphHopper hopper;
     private volatile RoadEdgeIndex roadEdgeIndex;
     private volatile String graphFingerprint;
+    private volatile String sourcePbfSha256;
 
     public GraphHopperManager(AppProperties properties) {
         this.properties = properties;
@@ -44,15 +43,20 @@ public final class GraphHopperManager {
             throw new IllegalStateException("路网初始化正在执行");
         }
 
-        HardAvoidingGraphHopper candidate = configuredHopper();
+        HardAvoidingGraphHopper candidate = null;
         try {
-            Path cache = Path.of(properties.routing().graphCachePath()).toAbsolutePath().normalize();
+            RoutingGraphConfiguration graphConfiguration =
+                    RoutingGraphConfiguration.resolve(properties.routing());
+            candidate = graphConfiguration.createHopper();
+            Path cache = graphConfiguration.cachePath();
             Path pbf = Path.of(properties.routing().pbfPath()).toAbsolutePath().normalize();
             candidate.setGraphHopperLocation(cache.toString());
+            LOGGER.info("准备初始化路网 路由模式={} 缓存目录={}",
+                    graphConfiguration.mode(), cache);
 
             String pbfHash;
             if (Files.isRegularFile(cache.resolve("properties"))) {
-                pbfHash = verifyExistingCache(cache, pbf);
+                pbfHash = verifyExistingCache(cache, pbf, graphConfiguration);
                 if (!candidate.load()) {
                     throw new IllegalStateException("GraphHopper 路网缓存无法加载");
                 }
@@ -65,13 +69,17 @@ public final class GraphHopperManager {
                 pbfHash = Hashing.sha256(pbf);
                 candidate.setOSMFile(pbf.toString());
                 candidate.importOrLoad();
-                writeCacheSourceHash(cache, pbfHash);
+                writeCacheMetadata(cache, SOURCE_HASH_FILE, pbfHash);
+                writeCacheMetadata(
+                        cache,
+                        CONFIGURATION_HASH_FILE,
+                        graphConfiguration.compatibilityHash());
                 LOGGER.info("GraphHopper 路网导入完成 节点数={} 边数={}",
                         candidate.getBaseGraph().getNodes(), candidate.getBaseGraph().getEdges());
             }
 
             String fingerprint = Hashing.sha256("graphhopper=11.0|pbf=" + pbfHash
-                    + "|encoded=" + ENCODED_VALUES
+                    + "|routingConfig=" + graphConfiguration.compatibilityHash()
                     + "|nodes=" + candidate.getBaseGraph().getNodes()
                     + "|edges=" + candidate.getBaseGraph().getEdges());
             BooleanEncodedValue carAccess = candidate.getEncodingManager()
@@ -83,12 +91,15 @@ public final class GraphHopperManager {
 
             this.hopper = candidate;
             this.graphFingerprint = "sha256:" + fingerprint;
+            this.sourcePbfSha256 = pbfHash;
             this.roadEdgeIndex = newRoadIndex;
             this.failureReason = null;
             state.set(GraphState.READY);
             LOGGER.info("道路边索引准备完成 索引边数={}", newRoadIndex.indexedEdgeCount());
         } catch (Exception exception) {
-            candidate.close();
+            if (candidate != null) {
+                candidate.close();
+            }
             this.failureReason = exception.getMessage();
             state.set(GraphState.FAILED);
             LOGGER.error("路网初始化失败 异常类型={} 错误信息={}",
@@ -136,16 +147,10 @@ public final class GraphHopperManager {
         return requireHopper().getBaseGraph().getBounds().contains(coordinate.lat(), coordinate.lng());
     }
 
-    private static HardAvoidingGraphHopper configuredHopper() {
-        HardAvoidingGraphHopper configured = new HardAvoidingGraphHopper();
-        configured.setEncodedValuesString(ENCODED_VALUES);
-        configured.setProfiles(new Profile("car").setCustomModel(GHUtility.loadCustomModelFromJar("car.json")));
-        configured.getCHPreparationHandler().setCHProfiles();
-        configured.getLMPreparationHandler().setLMProfiles();
-        return configured;
-    }
-
-    private static String verifyExistingCache(Path cache, Path pbf) throws IOException {
+    private static String verifyExistingCache(
+            Path cache,
+            Path pbf,
+            RoutingGraphConfiguration graphConfiguration) throws IOException {
         Path metadata = cache.resolve(SOURCE_HASH_FILE);
         if (!Files.isRegularFile(metadata)) {
             throw new IllegalStateException(
@@ -161,15 +166,46 @@ public final class GraphHopperManager {
                 throw new IllegalStateException("配置的 PBF 与现有路网缓存不匹配");
             }
         }
+        verifyConfigurationHash(cache, graphConfiguration);
         return cachedHash.toLowerCase();
     }
 
-    private static void writeCacheSourceHash(Path cache, String hash) throws IOException {
+    public String requireSourcePbfSha256() {
+        if (!isReady() || sourcePbfSha256 == null) {
+            throw new IllegalStateException("路网源 PBF 指纹尚未就绪");
+        }
+        return sourcePbfSha256;
+    }
+
+    static void verifyConfigurationHash(
+            Path cache,
+            RoutingGraphConfiguration graphConfiguration) throws IOException {
+        Path metadata = cache.resolve(CONFIGURATION_HASH_FILE);
+        if (!Files.isRegularFile(metadata)) {
+            if (graphConfiguration.requiresCompatibilityMetadata()) {
+                throw new IllegalStateException(
+                        "候选路网缓存缺少路由配置元数据，请使用新的空缓存目录重建");
+            }
+            return;
+        }
+        String cachedHash = Files.readString(metadata, StandardCharsets.US_ASCII).trim();
+        if (!cachedHash.matches("[0-9a-fA-F]{64}")) {
+            throw new IllegalStateException("路网缓存的路由配置元数据无效");
+        }
+        if (!cachedHash.equalsIgnoreCase(graphConfiguration.compatibilityHash())) {
+            throw new IllegalStateException("路网缓存与当前路由配置不兼容，请使用新的空缓存目录重建");
+        }
+    }
+
+    private static void writeCacheMetadata(
+            Path cache,
+            String fileName,
+            String value) throws IOException {
         Files.createDirectories(cache);
-        Path target = cache.resolve(SOURCE_HASH_FILE);
-        Path temporary = Files.createTempFile(cache, SOURCE_HASH_FILE, ".tmp");
+        Path target = cache.resolve(fileName);
+        Path temporary = Files.createTempFile(cache, fileName, ".tmp");
         try {
-            Files.writeString(temporary, hash + System.lineSeparator(), StandardCharsets.US_ASCII);
+            Files.writeString(temporary, value + System.lineSeparator(), StandardCharsets.US_ASCII);
             Files.move(temporary, target,
                     StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (AtomicMoveNotSupportedException exception) {
@@ -184,6 +220,7 @@ public final class GraphHopperManager {
         HardAvoidingGraphHopper value = hopper;
         hopper = null;
         roadEdgeIndex = null;
+        sourcePbfSha256 = null;
         if (value != null) {
             value.close();
         }

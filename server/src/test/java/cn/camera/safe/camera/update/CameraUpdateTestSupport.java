@@ -4,6 +4,7 @@ import cn.camera.safe.camera.CameraPoint;
 import cn.camera.safe.camera.CameraSnapshot;
 import cn.camera.safe.camera.CameraSpatialIndex;
 import cn.camera.safe.config.AppProperties;
+import cn.camera.safe.config.RoutingProfileMode;
 import cn.camera.safe.coordinate.Gcj02Coordinate;
 import cn.camera.safe.coordinate.Wgs84Coordinate;
 import cn.camera.safe.routing.BlockedEdgeSnapshot;
@@ -40,7 +41,8 @@ public final class CameraUpdateTestSupport {
                 2);
         return new AppProperties(
                 new AppProperties.Routing(
-                        "pbf", "cache", 30, 1, 1,
+                        "pbf", "cache", "candidate-cache", RoutingProfileMode.CURRENT,
+                        30, 1, 1,
                         Duration.ofSeconds(2), 10_000),
                 new AppProperties.Cameras(
                         root.resolve("cameras/camera.json").toString(),

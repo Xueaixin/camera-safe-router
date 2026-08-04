@@ -22,6 +22,8 @@ public record AppProperties(
     public record Routing(
             @NotBlank String pbfPath,
             @NotBlank String graphCachePath,
+            @NotBlank String candidateGraphCachePath,
+            @NotNull RoutingProfileMode profileMode,
             @DecimalMin("1.0") @DecimalMax("500.0") double safetyRadiusMeters,
             @Min(1) int calculationThreads,
             @Min(1) int calculationQueueCapacity,

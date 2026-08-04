@@ -53,6 +53,36 @@ const ERROR_PRESENTATIONS: Record<ApiErrorCode, RouteErrorPresentation> = {
     message: '当前限制点位下无法安全到达，请更换起点或终点。',
     retryable: false,
   },
+  ROUTE_SEARCH_TIMEOUT: {
+    state: 'unavailable',
+    title: '路线搜索超时',
+    message: '本次搜索未在时限内完成，请稍后重试。',
+    retryable: true,
+  },
+  ROUTE_SEARCH_RESOURCE_LIMIT: {
+    state: 'unavailable',
+    title: '路线搜索繁忙',
+    message: '本次搜索达到资源上限，请稍后重试。',
+    retryable: true,
+  },
+  SIXTH_RING_TOPOLOGY_NOT_READY: {
+    state: 'unavailable',
+    title: '六环拓扑未就绪',
+    message: '六环边界和通行口仍在加载，请稍后重试。',
+    retryable: true,
+  },
+  SIXTH_RING_BOUNDARY_AMBIGUOUS: {
+    state: 'outside-bounds',
+    title: '点位位于六环边界带',
+    message: '请将起点或终点调整到六环内侧或外侧后重试。',
+    retryable: false,
+  },
+  REFERENCE_ROUTE_FAILED: {
+    state: 'unavailable',
+    title: '参考路线生成失败',
+    message: '环内路线可达，但完整参考路线暂时无法生成，请稍后重试。',
+    retryable: true,
+  },
   ROUTE_CONFLICT_DETECTED: {
     state: 'protocol-error',
     title: '路线未通过安全校验',
@@ -75,6 +105,18 @@ const ERROR_PRESENTATIONS: Record<ApiErrorCode, RouteErrorPresentation> = {
     state: 'unavailable',
     title: '点位正在更新',
     message: '请等待当前更新完成后重试。',
+    retryable: true,
+  },
+  CAMERA_UPDATE_ALREADY_RUNNING: {
+    state: 'unavailable',
+    title: '点位数据正在更新',
+    message: '请等待当前数据更新完成后重试。',
+    retryable: true,
+  },
+  CAMERA_UPDATE_FAILED: {
+    state: 'unavailable',
+    title: '点位数据更新失败',
+    message: '当前更新未生效，请稍后重试或检查服务日志。',
     retryable: true,
   },
   INTERNAL_ERROR: {

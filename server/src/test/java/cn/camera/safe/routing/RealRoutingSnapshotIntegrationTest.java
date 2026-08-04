@@ -13,6 +13,7 @@ import cn.camera.safe.camera.CameraPoint;
 import cn.camera.safe.camera.CameraSnapshot;
 import cn.camera.safe.camera.CameraSpatialIndex;
 import cn.camera.safe.config.AppProperties;
+import cn.camera.safe.config.RoutingProfileMode;
 import cn.camera.safe.coordinate.CoordinateConverter;
 import cn.camera.safe.coordinate.CoordinateSystem;
 import cn.camera.safe.coordinate.Wgs84Coordinate;
@@ -140,7 +141,7 @@ class RealRoutingSnapshotIntegrationTest {
                 objectMapper, new CoordinateConverter()).load(camerasPath);
         assertThat(loadResult.isValid()).isTrue();
         assertThat(loadResult.sourceSha256())
-                .isEqualTo("d0cde33c0c3c1bec2dbd5aa501cb5706b5f04317d26853f0d781994d7de3a42c");
+                .isEqualTo("0c16ed44ef2e24cd4759afba28d6448925db699a4d3b38b05980f076e6ac7404");
         CameraSnapshot cameraSnapshot = CameraSnapshot.from(loadResult);
         BlockedEdgeGenerator generator = new BlockedEdgeGenerator();
         BlockedEdgeBuildResult radius20 = generator.generate(
@@ -150,22 +151,62 @@ class RealRoutingSnapshotIntegrationTest {
         BlockedEdgeBuildResult radius50 = generator.generate(
                 cameraSnapshot, graphManager.requireRoadEdgeIndex(), 50);
 
-        assertThat(graphManager.requireHopper().getBaseGraph().getNodes()).isEqualTo(2_360_314);
-        assertThat(graphManager.requireHopper().getBaseGraph().getEdges()).isEqualTo(3_234_067);
-        assertThat(graphManager.requireRoadEdgeIndex().indexedEdgeCount()).isEqualTo(2_905_913);
+        int graphNodes = graphManager.requireHopper().getBaseGraph().getNodes();
+        int graphEdges = graphManager.requireHopper().getBaseGraph().getEdges();
+        int indexedEdges = graphManager.requireRoadEdgeIndex().indexedEdgeCount();
+        boolean candidateProfile = properties.routing().profileMode()
+                == RoutingProfileMode.COMPLIANT_DISTANCE_V1;
+        if (candidateProfile) {
+            assertThat(graphManager.requireHopper().getProfile("car").hasTurnCosts()).isTrue();
+            assertThat(graphManager.requireHopper().getEncodingManager().getTurnEncodedValues()).isNotEmpty();
+            assertThat(graphNodes).isEqualTo(2_360_314);
+            assertThat(graphEdges).isEqualTo(3_234_241);
+            assertThat(indexedEdges).isEqualTo(2_906_087);
+        } else {
+            assertThat(graphNodes).isEqualTo(2_360_314);
+            assertThat(graphEdges).isEqualTo(3_234_067);
+            assertThat(indexedEdges).isEqualTo(2_905_913);
+        }
         assertThat(cameraSnapshot.sourceRecordCount()).isEqualTo(6_803);
         assertThat(cameraSnapshot.retainedRecordCount()).isEqualTo(5_707);
         assertThat(cameraSnapshot.outsideSixRingRecordCount()).isEqualTo(1_096);
         assertThat(cameraSnapshot.unrecognizedSixRingOutRecordCount()).isEqualTo(7);
-        assertThat(radius20.matchedCameraCount()).isEqualTo(5_678);
-        assertThat(radius20.unmatchedCameraIds()).hasSize(29);
-        assertThat(radius20.snapshot().blockedEdgeCount()).isEqualTo(14_616);
-        assertThat(radius30.matchedCameraCount()).isEqualTo(5_688);
-        assertThat(radius30.unmatchedCameraIds()).hasSize(19);
-        assertThat(radius30.snapshot().blockedEdgeCount()).isEqualTo(19_731);
-        assertThat(radius50.matchedCameraCount()).isEqualTo(5_692);
-        assertThat(radius50.unmatchedCameraIds()).hasSize(15);
-        assertThat(radius50.snapshot().blockedEdgeCount()).isEqualTo(27_548);
+        if (candidateProfile) {
+            System.out.printf(
+                    "CANDIDATE_BASELINE nodes=%d edges=%d indexedEdges=%d "
+                            + "radius20=%d/%d/%d radius30=%d/%d/%d radius50=%d/%d/%d%n",
+                    graphNodes,
+                    graphEdges,
+                    indexedEdges,
+                    radius20.matchedCameraCount(),
+                    radius20.unmatchedCameraIds().size(),
+                    radius20.snapshot().blockedEdgeCount(),
+                    radius30.matchedCameraCount(),
+                    radius30.unmatchedCameraIds().size(),
+                    radius30.snapshot().blockedEdgeCount(),
+                    radius50.matchedCameraCount(),
+                    radius50.unmatchedCameraIds().size(),
+                    radius50.snapshot().blockedEdgeCount());
+            assertThat(radius20.matchedCameraCount()).isEqualTo(5_678);
+            assertThat(radius20.unmatchedCameraIds()).hasSize(29);
+            assertThat(radius20.snapshot().blockedEdgeCount()).isEqualTo(14_639);
+            assertThat(radius30.matchedCameraCount()).isEqualTo(5_688);
+            assertThat(radius30.unmatchedCameraIds()).hasSize(19);
+            assertThat(radius30.snapshot().blockedEdgeCount()).isEqualTo(19_771);
+            assertThat(radius50.matchedCameraCount()).isEqualTo(5_692);
+            assertThat(radius50.unmatchedCameraIds()).hasSize(15);
+            assertThat(radius50.snapshot().blockedEdgeCount()).isEqualTo(27_610);
+        } else {
+            assertThat(radius20.matchedCameraCount()).isEqualTo(5_678);
+            assertThat(radius20.unmatchedCameraIds()).hasSize(29);
+            assertThat(radius20.snapshot().blockedEdgeCount()).isEqualTo(14_616);
+            assertThat(radius30.matchedCameraCount()).isEqualTo(5_688);
+            assertThat(radius30.unmatchedCameraIds()).hasSize(19);
+            assertThat(radius30.snapshot().blockedEdgeCount()).isEqualTo(19_731);
+            assertThat(radius50.matchedCameraCount()).isEqualTo(5_692);
+            assertThat(radius50.unmatchedCameraIds()).hasSize(15);
+            assertThat(radius50.snapshot().blockedEdgeCount()).isEqualTo(27_548);
+        }
         assertThat(radius30.snapshot().blockedForwardCount())
                 .isEqualTo(radius30.snapshot().blockedReverseCount())
                 .isPositive();
@@ -248,11 +289,30 @@ class RealRoutingSnapshotIntegrationTest {
         when(snapshotManager.current()).thenReturn(Optional.of(snapshot));
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
+            RoutingEngine engine = new GraphHopperRoutingEngine(graphManager, properties);
+            RoutePlanner planner = (start, end, currentSnapshot) -> {
+                EngineRoute route = engine.route(start, end, currentSnapshot);
+                RouteLeg safeSegment = new RouteLeg(
+                        route.distanceMeters(), route.durationMillis(), route.geometry());
+                return new PlannedRoute(
+                        RoutePlanningMode.INTERNAL_SAFE,
+                        "real-snapshot-test",
+                        null,
+                        null,
+                        safeSegment,
+                        null,
+                        route.distanceMeters(),
+                        route.durationMillis(),
+                        route.geometry(),
+                        route.searchEdgeChecks(),
+                        route.virtualEdgeChecks(),
+                        route.blockedRejections());
+            };
             RoutePlanningService service = new RoutePlanningService(
                     graphManager,
                     snapshotManager,
                     new CoordinateConverter(),
-                    new GraphHopperRoutingEngine(graphManager, properties),
+                    planner,
                     new RouteSafetyValidator(),
                     executor,
                     properties);
@@ -398,9 +458,21 @@ class RealRoutingSnapshotIntegrationTest {
             Path cameras,
             Path graphCache,
             Path snapshots) {
+        RoutingProfileMode profileMode = RoutingProfileMode.valueOf(
+                System.getProperty("real.routing.profile.mode", RoutingProfileMode.CURRENT.name()));
+        Path currentCache = profileMode == RoutingProfileMode.CURRENT
+                ? graphCache
+                : graphCache.resolveSibling(graphCache.getFileName() + "-current-reference");
+        Path candidateCache = profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
+                ? graphCache
+                : graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference");
         return new AppProperties(
                 new AppProperties.Routing(
-                        pbf.toString(), graphCache.toString(), 30, 2, 4,
+                        pbf.toString(),
+                        currentCache.toString(),
+                        candidateCache.toString(),
+                        profileMode,
+                        30, 2, 4,
                         Duration.ofSeconds(10), 1_000_000),
                 new AppProperties.Cameras(
                         cameras.toString(), snapshots.toString(), true, 10_000, 1,

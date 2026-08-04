@@ -11,17 +11,21 @@ import cn.camera.safe.camera.CameraPoint;
 import cn.camera.safe.camera.CameraSnapshot;
 import cn.camera.safe.camera.CameraSpatialIndex;
 import cn.camera.safe.config.AppProperties;
+import cn.camera.safe.config.RoutingProfileMode;
 import cn.camera.safe.coordinate.CoordinateConverter;
 import cn.camera.safe.coordinate.CoordinateSystem;
 import cn.camera.safe.coordinate.Gcj02Coordinate;
 import cn.camera.safe.coordinate.Wgs84Coordinate;
 import cn.camera.safe.routing.BlockedEdgeSnapshot;
-import cn.camera.safe.routing.EngineRoute;
 import cn.camera.safe.routing.GraphHopperManager;
-import cn.camera.safe.routing.RoutingEngine;
-import cn.camera.safe.routing.RoutingEngineException;
+import cn.camera.safe.routing.PlannedRoute;
+import cn.camera.safe.routing.RouteLeg;
+import cn.camera.safe.routing.RoutePlanner;
+import cn.camera.safe.routing.RoutePlanningMode;
 import cn.camera.safe.routing.RoutingSnapshot;
 import cn.camera.safe.routing.RoutingSnapshotManager;
+import cn.camera.safe.routing.SixthRingPortal;
+import cn.camera.safe.routing.SixthRingRouteException;
 import cn.camera.safe.validation.RouteSafetyValidator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +34,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -57,12 +62,11 @@ public class RoutePlanningServiceTest {
         RoutingSnapshot first = snapshot("camera-v1", "blocked-v1", new Wgs84Coordinate(116.5, 40.0));
         RoutingSnapshot replacement = snapshot("camera-v2", "blocked-v2", new Wgs84Coordinate(116.6, 40.1));
         when(snapshotManager.current()).thenReturn(Optional.of(first), Optional.of(replacement));
-        RoutingEngine engine = mock(RoutingEngine.class);
-        when(engine.route(any(), any(), any())).thenReturn(new EngineRoute(
-                1_000, 120_000,
-                List.of(new Wgs84Coordinate(116.39, 39.90), new Wgs84Coordinate(116.41, 39.91)),
-                42, 2, 1));
-        RoutePlanningService service = service(graphManager, snapshotManager, engine);
+        RoutePlanner planner = mock(RoutePlanner.class);
+        when(planner.plan(any(), any(), any())).thenReturn(plannedRoute(
+                List.of(new Wgs84Coordinate(116.39, 39.90),
+                        new Wgs84Coordinate(116.41, 39.91))));
+        RoutePlanningService service = service(graphManager, snapshotManager, planner);
 
         RouteResponse response = service.plan(request());
 
@@ -70,7 +74,12 @@ public class RoutePlanningServiceTest {
         assertThat(response.blockedEdgeVersion()).isEqualTo("blocked-v1");
         assertThat(response.cameraConflictCount()).isZero();
         assertThat(response.coordinateSystem()).isEqualTo(CoordinateSystem.GCJ02);
-        verify(engine).route(any(), any(), org.mockito.ArgumentMatchers.same(first));
+        assertThat(response.planningMode())
+                .isEqualTo(cn.camera.safe.api.model.RoutePlanningMode.INTERNAL_SAFE);
+        assertThat(response.boundaryVersion()).isEqualTo("boundary-v1");
+        assertThat(response.safeSegment()).isNotNull();
+        assertThat(response.referenceSegment()).isNull();
+        verify(planner).plan(any(), any(), org.mockito.ArgumentMatchers.same(first));
         verify(snapshotManager).current();
     }
 
@@ -80,13 +89,13 @@ public class RoutePlanningServiceTest {
         RoutingSnapshotManager snapshotManager = mock(RoutingSnapshotManager.class);
         RoutingSnapshot snapshot = snapshot("camera-v1", "blocked-v1", new Wgs84Coordinate(116.39, 39.90));
         when(snapshotManager.current()).thenReturn(Optional.of(snapshot));
-        RoutingEngine engine = mock(RoutingEngine.class);
-        RoutePlanningService service = service(graphManager, snapshotManager, engine);
+        RoutePlanner planner = mock(RoutePlanner.class);
+        RoutePlanningService service = service(graphManager, snapshotManager, planner);
 
         assertThatThrownBy(() -> service.plan(request()))
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.code()).isEqualTo(ErrorCode.START_IN_RESTRICTED_AREA));
-        verify(engine, never()).route(any(), any(), any());
+        verify(planner, never()).plan(any(), any(), any());
     }
 
     @Test
@@ -95,10 +104,10 @@ public class RoutePlanningServiceTest {
         RoutingSnapshotManager snapshotManager = mock(RoutingSnapshotManager.class);
         when(snapshotManager.current()).thenReturn(Optional.of(
                 snapshot("camera-v1", "blocked-v1", new Wgs84Coordinate(116.5, 40.0))));
-        RoutingEngine engine = mock(RoutingEngine.class);
-        when(engine.route(any(), any(), any())).thenThrow(
-                new RoutingEngineException(RoutingEngineException.Reason.NO_ROUTE, "none"));
-        RoutePlanningService service = service(graphManager, snapshotManager, engine);
+        RoutePlanner planner = mock(RoutePlanner.class);
+        when(planner.plan(any(), any(), any())).thenThrow(
+                new SixthRingRouteException(SixthRingRouteException.Reason.NO_ROUTE, "none"));
+        RoutePlanningService service = service(graphManager, snapshotManager, planner);
 
         assertThatThrownBy(() -> service.plan(request()))
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {
@@ -113,12 +122,11 @@ public class RoutePlanningServiceTest {
         RoutingSnapshotManager snapshotManager = mock(RoutingSnapshotManager.class);
         when(snapshotManager.current()).thenReturn(Optional.of(
                 snapshot("camera-v1", "blocked-v1", new Wgs84Coordinate(116.4, 39.905))));
-        RoutingEngine engine = mock(RoutingEngine.class);
-        when(engine.route(any(), any(), any())).thenReturn(new EngineRoute(
-                1_000, 60_000,
-                List.of(new Wgs84Coordinate(116.399, 39.905), new Wgs84Coordinate(116.401, 39.905)),
-                10, 2, 0));
-        RoutePlanningService service = service(graphManager, snapshotManager, engine);
+        RoutePlanner planner = mock(RoutePlanner.class);
+        when(planner.plan(any(), any(), any())).thenReturn(plannedRoute(
+                List.of(new Wgs84Coordinate(116.399, 39.905),
+                        new Wgs84Coordinate(116.401, 39.905))));
+        RoutePlanningService service = service(graphManager, snapshotManager, planner);
 
         assertThatThrownBy(() -> service.plan(request()))
                 .isInstanceOfSatisfying(BusinessException.class,
@@ -128,12 +136,12 @@ public class RoutePlanningServiceTest {
     private RoutePlanningService service(
             GraphHopperManager graphManager,
             RoutingSnapshotManager snapshotManager,
-            RoutingEngine engine) {
+            RoutePlanner planner) {
         return new RoutePlanningService(
                 graphManager,
                 snapshotManager,
                 new CoordinateConverter(),
-                engine,
+                planner,
                 new RouteSafetyValidator(),
                 executor,
                 properties());
@@ -175,12 +183,133 @@ public class RoutePlanningServiceTest {
     public static AppProperties properties() {
         return new AppProperties(
                 new AppProperties.Routing(
-                        "pbf", "cache", 30, 1, 2,
+                        "pbf", "cache", "candidate-cache", RoutingProfileMode.CURRENT,
+                        30, 1, 2,
                         Duration.ofSeconds(2), 10_000),
                 new AppProperties.Cameras(
                         "cameras", "snapshots", true, 100, 1,
                         updateProperties()),
                 new AppProperties.Admin(true));
+    }
+
+    @Test
+    void mapsCrossBoundarySegmentsAndValidatesOnlyTheSafeSegment() {
+        GraphHopperManager graphManager = readyGraphManager();
+        RoutingSnapshotManager snapshotManager = mock(RoutingSnapshotManager.class);
+        RoutingSnapshot snapshot = snapshot(
+                "camera-v1", "blocked-v1", new Wgs84Coordinate(116.5, 40.0));
+        when(snapshotManager.current()).thenReturn(Optional.of(snapshot));
+        RoutePlanner planner = mock(RoutePlanner.class);
+        Wgs84Coordinate start = new Wgs84Coordinate(116.39, 39.90);
+        Wgs84Coordinate crossing = new Wgs84Coordinate(116.40, 39.905);
+        Wgs84Coordinate end = new Wgs84Coordinate(116.41, 39.91);
+        RouteLeg safe = new RouteLeg(500, 60_000, List.of(start, crossing));
+        RouteLeg reference = new RouteLeg(
+                1_000,
+                120_000,
+                List.of(crossing, new Wgs84Coordinate(116.5, 40.0), end));
+        SixthRingPortal portal = new SixthRingPortal(
+                "portal-1",
+                10,
+                20,
+                SixthRingPortal.Direction.OUTBOUND,
+                SixthRingPortal.BoundaryRole.OUTER_EXIT,
+                SixthRingPortal.CandidateType.INTERIOR_EDGE,
+                -1,
+                0.5,
+                crossing,
+                "六环路");
+        when(planner.plan(any(), any(), any())).thenReturn(new PlannedRoute(
+                RoutePlanningMode.CROSS_BOUNDARY_OUTBOUND,
+                "boundary-v1",
+                SixthRingPortal.Direction.OUTBOUND,
+                portal,
+                safe,
+                reference,
+                1_500,
+                180_000,
+                List.of(start, crossing, new Wgs84Coordinate(116.5, 40.0), end),
+                100,
+                5,
+                3));
+
+        RouteResponse response = service(graphManager, snapshotManager, planner).plan(request());
+
+        assertThat(response.planningMode())
+                .isEqualTo(cn.camera.safe.api.model.RoutePlanningMode.CROSS_BOUNDARY_OUTBOUND);
+        assertThat(response.boundaryCrossing().portalId()).isEqualTo("portal-1");
+        assertThat(response.boundaryCrossing().wgs84().lng()).isEqualTo(crossing.lng());
+        assertThat(response.boundaryCrossing().gcj02().lng()).isNotEqualTo(crossing.lng());
+        assertThat(response.safeSegment().geometry()).hasSize(2);
+        assertThat(response.referenceSegment().geometry()).hasSize(3);
+    }
+
+    @Test
+    void keepsDistinctSixthRingFailureCodes() {
+        Map<SixthRingRouteException.Reason, ExpectedError> cases = Map.of(
+                SixthRingRouteException.Reason.TOPOLOGY_NOT_READY,
+                new ExpectedError(ErrorCode.SIXTH_RING_TOPOLOGY_NOT_READY, 503),
+                SixthRingRouteException.Reason.BOUNDARY_AMBIGUOUS,
+                new ExpectedError(ErrorCode.SIXTH_RING_BOUNDARY_AMBIGUOUS, 422),
+                SixthRingRouteException.Reason.SEARCH_TIMEOUT,
+                new ExpectedError(ErrorCode.ROUTE_SEARCH_TIMEOUT, 503),
+                SixthRingRouteException.Reason.REFERENCE_ROUTE_FAILED,
+                new ExpectedError(ErrorCode.REFERENCE_ROUTE_FAILED, 503));
+
+        cases.forEach((reason, expected) -> {
+            GraphHopperManager graphManager = readyGraphManager();
+            RoutingSnapshotManager snapshotManager = mock(RoutingSnapshotManager.class);
+            when(snapshotManager.current()).thenReturn(Optional.of(
+                    snapshot("camera-v1", "blocked-v1", new Wgs84Coordinate(116.5, 40.0))));
+            RoutePlanner planner = mock(RoutePlanner.class);
+            when(planner.plan(any(), any(), any())).thenThrow(
+                    new SixthRingRouteException(reason, reason.name()));
+
+            assertThatThrownBy(() -> service(graphManager, snapshotManager, planner).plan(request()))
+                    .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                        assertThat(exception.code()).isEqualTo(expected.code());
+                        assertThat(exception.status().value()).isEqualTo(expected.status());
+                    });
+        });
+    }
+
+    private static PlannedRoute plannedRoute(List<Wgs84Coordinate> geometry) {
+        RouteLeg leg = new RouteLeg(1_000, 120_000, geometry);
+        return new PlannedRoute(
+                RoutePlanningMode.INTERNAL_SAFE,
+                "boundary-v1",
+                null,
+                null,
+                leg,
+                null,
+                leg.distanceMeters(),
+                leg.durationMillis(),
+                leg.geometry(),
+                42,
+                2,
+                1);
+    }
+
+    private record ExpectedError(ErrorCode code, int status) {
+    }
+
+    @Test
+    void mapsSearchResourceLimitToServiceUnavailableInsteadOfNoCompliantRoute() {
+        GraphHopperManager graphManager = readyGraphManager();
+        RoutingSnapshotManager snapshotManager = mock(RoutingSnapshotManager.class);
+        when(snapshotManager.current()).thenReturn(Optional.of(
+                snapshot("camera-v1", "blocked-v1", new Wgs84Coordinate(116.5, 40.0))));
+        RoutePlanner planner = mock(RoutePlanner.class);
+        when(planner.plan(any(), any(), any())).thenThrow(
+                new SixthRingRouteException(
+                        SixthRingRouteException.Reason.RESOURCE_LIMIT, "limit"));
+        RoutePlanningService service = service(graphManager, snapshotManager, planner);
+
+        assertThatThrownBy(() -> service.plan(request()))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.code()).isEqualTo(ErrorCode.ROUTE_SEARCH_RESOURCE_LIMIT);
+                    assertThat(exception.status().value()).isEqualTo(503);
+                });
     }
 
     public static AppProperties.Update updateProperties() {

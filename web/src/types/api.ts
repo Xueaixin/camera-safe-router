@@ -20,9 +20,39 @@ export interface RouteStep {
   endIndex: number;
 }
 
+export type RoutePlanningMode =
+  | 'INTERNAL_SAFE'
+  | 'CROSS_BOUNDARY_OUTBOUND'
+  | 'CROSS_BOUNDARY_INBOUND'
+  | 'EXTERNAL_ONLY';
+
+export type BoundaryDirection = 'OUTBOUND' | 'INBOUND';
+export type BoundaryRole = 'OUTER_EXIT' | 'INNER_ENTRY';
+
+export interface BoundaryCrossing {
+  portalId: string;
+  roadName?: string | null;
+  direction: BoundaryDirection;
+  boundaryRole: BoundaryRole;
+  wgs84: OutputCoordinate;
+  gcj02: OutputCoordinate;
+}
+
+export interface RouteSegment {
+  distanceMeters: number;
+  durationSeconds: number;
+  geometry: OutputCoordinate[];
+}
+
 export interface RouteResponse {
   routeId: string;
   coordinateSystem: CoordinateSystem;
+  planningMode: RoutePlanningMode;
+  boundaryVersion: string;
+  boundaryDirection: BoundaryDirection | null;
+  boundaryCrossing: BoundaryCrossing | null;
+  safeSegment: RouteSegment | null;
+  referenceSegment: RouteSegment | null;
   distanceMeters: number;
   durationSeconds: number;
   cameraConflictCount: 0;
@@ -63,6 +93,7 @@ export interface HealthResponse {
 export interface ReadinessResponse {
   status: 'READY' | 'NOT_READY';
   graphLoaded: boolean;
+  sixthRingTopologyLoaded: boolean;
   cameraSnapshotLoaded: boolean;
   blockedEdgesLoaded: boolean;
   reason?: string | null;
@@ -76,10 +107,17 @@ export const API_ERROR_CODES = [
   'START_IN_RESTRICTED_AREA',
   'END_IN_RESTRICTED_AREA',
   'NO_COMPLIANT_ROUTE',
+  'ROUTE_SEARCH_TIMEOUT',
+  'ROUTE_SEARCH_RESOURCE_LIMIT',
+  'SIXTH_RING_TOPOLOGY_NOT_READY',
+  'SIXTH_RING_BOUNDARY_AMBIGUOUS',
+  'REFERENCE_ROUTE_FAILED',
   'ROUTE_CONFLICT_DETECTED',
   'ROUTING_NOT_READY',
   'CAMERA_SNAPSHOT_NOT_READY',
   'REFRESH_ALREADY_RUNNING',
+  'CAMERA_UPDATE_ALREADY_RUNNING',
+  'CAMERA_UPDATE_FAILED',
   'INTERNAL_ERROR',
 ] as const;
 

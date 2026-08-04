@@ -152,6 +152,7 @@ export class MockApiClient implements ApiClient {
     return {
       status: ready ? 'READY' : 'NOT_READY',
       graphLoaded: this.scenario !== 'not-ready',
+      sixthRingTopologyLoaded: this.scenario !== 'not-ready',
       cameraSnapshotLoaded: this.scenario !== 'snapshot-not-ready',
       blockedEdgesLoaded: ready,
       ...(ready ? {} : { reason: 'Mock service not ready' }),

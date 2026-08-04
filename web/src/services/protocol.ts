@@ -1,11 +1,16 @@
 import {
   API_ERROR_CODES,
   type ApiError,
+  type BoundaryCrossing,
+  type BoundaryDirection,
+  type BoundaryRole,
   type CameraPage,
   type CameraSnapshotStatus,
   type HealthResponse,
   type ReadinessResponse,
   type RouteResponse,
+  type RoutePlanningMode,
+  type RouteSegment,
   type RouteStep,
 } from '@/types/api';
 import type { CoordinateSystem } from '@/types/coordinate';
@@ -34,6 +39,75 @@ function stringField(record: Record<string, unknown>, key: string): string {
 function coordinateSystem(value: unknown): CoordinateSystem {
   if (value === 'WGS84' || value === 'GCJ02') return value;
   throw new ProtocolError('响应坐标系未知');
+}
+
+function outputCoordinate(value: unknown, field: string) {
+  if (!isRecord(value) || !isFiniteNumber(value.lng) || !isFiniteNumber(value.lat)) {
+    throw new ProtocolError(`${field}坐标无效`);
+  }
+  return { lng: value.lng, lat: value.lat };
+}
+
+function planningMode(value: unknown): RoutePlanningMode {
+  if (
+    value === 'INTERNAL_SAFE' ||
+    value === 'CROSS_BOUNDARY_OUTBOUND' ||
+    value === 'CROSS_BOUNDARY_INBOUND' ||
+    value === 'EXTERNAL_ONLY'
+  ) {
+    return value;
+  }
+  throw new ProtocolError('路线规划模式无效');
+}
+
+function boundaryDirection(value: unknown): BoundaryDirection {
+  if (value === 'OUTBOUND' || value === 'INBOUND') return value;
+  throw new ProtocolError('六环通行方向无效');
+}
+
+function boundaryRole(value: unknown): BoundaryRole {
+  if (value === 'OUTER_EXIT' || value === 'INNER_ENTRY') return value;
+  throw new ProtocolError('六环边界角色无效');
+}
+
+function requiredNullable(record: Record<string, unknown>, key: string): unknown {
+  if (!Object.prototype.hasOwnProperty.call(record, key)) {
+    throw new ProtocolError(`响应缺少字段 ${key}`);
+  }
+  return record[key];
+}
+
+function parseSegment(value: unknown, field: string): RouteSegment {
+  if (!isRecord(value)) throw new ProtocolError(`${field}结构无效`);
+  if (
+    !isNonNegativeNumber(value.distanceMeters) ||
+    !isNonNegativeInteger(value.durationSeconds) ||
+    !Array.isArray(value.geometry) ||
+    value.geometry.length < 2
+  ) {
+    throw new ProtocolError(`${field}距离、时间或几何无效`);
+  }
+  return {
+    distanceMeters: value.distanceMeters,
+    durationSeconds: value.durationSeconds,
+    geometry: value.geometry.map((point) => outputCoordinate(point, field)),
+  };
+}
+
+function parseBoundaryCrossing(value: unknown): BoundaryCrossing {
+  if (!isRecord(value)) throw new ProtocolError('六环通行口结构无效');
+  const roadName = value.roadName;
+  if (roadName !== undefined && roadName !== null && typeof roadName !== 'string') {
+    throw new ProtocolError('六环通行口道路名称无效');
+  }
+  return {
+    portalId: stringField(value, 'portalId'),
+    ...(roadName !== undefined ? { roadName } : {}),
+    direction: boundaryDirection(value.direction),
+    boundaryRole: boundaryRole(value.boundaryRole),
+    wgs84: outputCoordinate(value.wgs84, '六环通行口 WGS84'),
+    gcj02: outputCoordinate(value.gcj02, '六环通行口 GCJ02'),
+  };
 }
 
 function parseStep(value: unknown): RouteStep {
@@ -73,21 +147,67 @@ export function parseRouteResponse(value: unknown): RouteResponse {
   if (!Array.isArray(value.geometry) || value.geometry.length < 2) {
     throw new ProtocolError('路线几何点不足');
   }
-  const geometry = value.geometry.map((point) => {
-    if (!isRecord(point) || !isFiniteNumber(point.lng) || !isFiniteNumber(point.lat)) {
-      throw new ProtocolError('路线几何坐标无效');
-    }
-    return { lng: point.lng, lat: point.lat };
-  });
+  const geometry = value.geometry.map((point) => outputCoordinate(point, '路线几何'));
   if (!Array.isArray(value.steps)) throw new ProtocolError('路线步骤结构无效');
   const distanceMeters = value.distanceMeters;
   const durationSeconds = value.durationSeconds;
   if (!isNonNegativeNumber(distanceMeters) || !isNonNegativeInteger(durationSeconds)) {
     throw new ProtocolError('路线距离或时间无效');
   }
+  const mode = planningMode(value.planningMode);
+  const directionValue = requiredNullable(value, 'boundaryDirection');
+  const crossingValue = requiredNullable(value, 'boundaryCrossing');
+  const safeValue = requiredNullable(value, 'safeSegment');
+  const referenceValue = requiredNullable(value, 'referenceSegment');
+  const direction = directionValue === null ? null : boundaryDirection(directionValue);
+  const crossing = crossingValue === null ? null : parseBoundaryCrossing(crossingValue);
+  const safeSegment = safeValue === null ? null : parseSegment(safeValue, '环内安全段');
+  const referenceSegment =
+    referenceValue === null ? null : parseSegment(referenceValue, '环外参考段');
+
+  const internalShape =
+    mode === 'INTERNAL_SAFE' &&
+    direction === null &&
+    crossing === null &&
+    safeSegment !== null &&
+    referenceSegment === null;
+  const externalShape =
+    mode === 'EXTERNAL_ONLY' &&
+    direction === null &&
+    crossing === null &&
+    safeSegment === null &&
+    referenceSegment !== null;
+  const expectedDirection =
+    mode === 'CROSS_BOUNDARY_OUTBOUND'
+      ? 'OUTBOUND'
+      : mode === 'CROSS_BOUNDARY_INBOUND'
+        ? 'INBOUND'
+        : null;
+  const expectedRole =
+    mode === 'CROSS_BOUNDARY_OUTBOUND'
+      ? 'OUTER_EXIT'
+      : mode === 'CROSS_BOUNDARY_INBOUND'
+        ? 'INNER_ENTRY'
+        : null;
+  const crossBoundaryShape =
+    expectedDirection !== null &&
+    direction === expectedDirection &&
+    crossing?.direction === expectedDirection &&
+    crossing?.boundaryRole === expectedRole &&
+    safeSegment !== null &&
+    referenceSegment !== null;
+  if (!internalShape && !externalShape && !crossBoundaryShape) {
+    throw new ProtocolError('路线规划模式与分段结构不一致');
+  }
   return {
     routeId: stringField(value, 'routeId'),
     coordinateSystem: coordinateSystem(value.coordinateSystem),
+    planningMode: mode,
+    boundaryVersion: stringField(value, 'boundaryVersion'),
+    boundaryDirection: direction,
+    boundaryCrossing: crossing,
+    safeSegment,
+    referenceSegment,
     distanceMeters,
     durationSeconds,
     cameraConflictCount: 0,
@@ -158,6 +278,7 @@ export function parseReadinessResponse(value: unknown): ReadinessResponse {
   }
   if (
     typeof value.graphLoaded !== 'boolean' ||
+    typeof value.sixthRingTopologyLoaded !== 'boolean' ||
     typeof value.cameraSnapshotLoaded !== 'boolean' ||
     typeof value.blockedEdgesLoaded !== 'boolean'
   ) {
@@ -170,6 +291,7 @@ export function parseReadinessResponse(value: unknown): ReadinessResponse {
   return {
     status: value.status,
     graphLoaded: value.graphLoaded,
+    sixthRingTopologyLoaded: value.sixthRingTopologyLoaded,
     cameraSnapshotLoaded: value.cameraSnapshotLoaded,
     blockedEdgesLoaded: value.blockedEdgesLoaded,
     ...(reason !== undefined ? { reason } : {}),

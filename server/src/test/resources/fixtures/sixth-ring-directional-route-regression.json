@@ -1,0 +1,125 @@
+{
+  "pbfSha256": "2a1bcebc16586858bc116a67dd10b9e5191241bbbb096866d0d0a2538ca16131",
+  "cameraSha256": "0c16ed44ef2e24cd4759afba28d6448925db699a4d3b38b05980f076e6ac7404",
+  "reservedReviewClusters": ["C004", "C053", "C060", "C123"],
+  "crossBoundaryRoutes": [
+    {
+      "id": "east-outbound",
+      "quadrant": "EAST",
+      "direction": "OUTBOUND",
+      "start": {"lng": 116.5999995, "lat": 39.9000364},
+      "end": {"lng": 116.8170, "lat": 39.9490},
+      "minDistanceMeters": 5000,
+      "maxDistanceMeters": 80000,
+      "reviewExpectation": "东向跨界，允许普通道路或高速通行口"
+    },
+    {
+      "id": "east-inbound",
+      "quadrant": "EAST",
+      "direction": "INBOUND",
+      "start": {"lng": 116.8170, "lat": 39.9490},
+      "end": {"lng": 116.5999995, "lat": 39.9000364},
+      "minDistanceMeters": 5000,
+      "maxDistanceMeters": 80000,
+      "reviewExpectation": "东向入环，尽可能晚进入内侧边界"
+    },
+    {
+      "id": "south-outbound",
+      "quadrant": "SOUTH",
+      "direction": "OUTBOUND",
+      "start": {"lng": 116.3981473, "lat": 39.7523199},
+      "end": {"lng": 116.3190, "lat": 39.5160},
+      "minDistanceMeters": 15000,
+      "maxDistanceMeters": 120000,
+      "reviewExpectation": "南向跨界，不强制六环高速或收费站"
+    },
+    {
+      "id": "south-inbound",
+      "quadrant": "SOUTH",
+      "direction": "INBOUND",
+      "start": {"lng": 116.3190, "lat": 39.5160},
+      "end": {"lng": 116.3981473, "lat": 39.7523199},
+      "minDistanceMeters": 15000,
+      "maxDistanceMeters": 120000,
+      "reviewExpectation": "南向入环，尽可能晚进入内侧边界"
+    },
+    {
+      "id": "west-outbound",
+      "quadrant": "WEST",
+      "direction": "OUTBOUND",
+      "start": {"lng": 116.2009058, "lat": 39.9002488},
+      "end": {"lng": 116.0830, "lat": 39.6810},
+      "minDistanceMeters": 10000,
+      "maxDistanceMeters": 110000,
+      "reviewExpectation": "西南方向跨界，覆盖普通道路、主辅路或匝道"
+    },
+    {
+      "id": "west-inbound",
+      "quadrant": "WEST",
+      "direction": "INBOUND",
+      "start": {"lng": 116.0830, "lat": 39.6810},
+      "end": {"lng": 116.2009058, "lat": 39.9002488},
+      "minDistanceMeters": 10000,
+      "maxDistanceMeters": 110000,
+      "reviewExpectation": "西南方向入环，尽可能晚进入内侧边界"
+    },
+    {
+      "id": "north-outbound",
+      "quadrant": "NORTH",
+      "direction": "OUTBOUND",
+      "start": {"lng": 116.3996417, "lat": 40.1024546},
+      "end": {"lng": 116.0080, "lat": 40.3590},
+      "minDistanceMeters": 20000,
+      "maxDistanceMeters": 130000,
+      "reviewExpectation": "北向跨界，覆盖西北方向完整参考路线选择"
+    },
+    {
+      "id": "north-inbound",
+      "quadrant": "NORTH",
+      "direction": "INBOUND",
+      "start": {"lng": 116.0080, "lat": 40.3590},
+      "end": {"lng": 116.3996417, "lat": 40.1024546},
+      "minDistanceMeters": 20000,
+      "maxDistanceMeters": 130000,
+      "reviewExpectation": "北向入环，尽可能晚进入内侧边界"
+    }
+  ],
+  "internalRoutes": [
+    {
+      "id": "east-internal",
+      "quadrant": "EAST",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 116.5999995, "lat": 39.9000364},
+      "minDistanceMeters": 5000,
+      "maxDistanceMeters": 70000,
+      "reviewExpectation": "东侧环内合规距离路线"
+    },
+    {
+      "id": "south-internal",
+      "quadrant": "SOUTH",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 116.3981473, "lat": 39.7523199},
+      "minDistanceMeters": 5000,
+      "maxDistanceMeters": 70000,
+      "reviewExpectation": "南侧环内合规距离路线"
+    },
+    {
+      "id": "west-internal",
+      "quadrant": "WEST",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 116.2009058, "lat": 39.9002488},
+      "minDistanceMeters": 5000,
+      "maxDistanceMeters": 70000,
+      "reviewExpectation": "西侧环内合规距离路线"
+    },
+    {
+      "id": "north-internal",
+      "quadrant": "NORTH",
+      "start": {"lng": 116.3970, "lat": 39.9080},
+      "end": {"lng": 116.3996417, "lat": 40.1024546},
+      "minDistanceMeters": 5000,
+      "maxDistanceMeters": 70000,
+      "reviewExpectation": "北侧环内合规距离路线"
+    }
+  ]
+}

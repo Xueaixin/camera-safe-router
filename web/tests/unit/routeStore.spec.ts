@@ -49,6 +49,7 @@ function clientWith(
     readiness: async (): Promise<ReadinessResponse> => ({
       status: 'READY',
       graphLoaded: true,
+      sixthRingTopologyLoaded: true,
       cameraSnapshotLoaded: true,
       blockedEdgesLoaded: true,
     }),

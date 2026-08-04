@@ -1,8 +1,12 @@
 package cn.camera.safe.routing;
 
+import cn.camera.safe.coordinate.Wgs84Coordinate;
+import com.graphhopper.routing.querygraph.QueryGraph;
 import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.BaseGraph;
+import com.graphhopper.storage.index.Snap;
 import com.graphhopper.util.EdgeIteratorState;
+import com.graphhopper.util.shapes.GHPoint3D;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -10,13 +14,13 @@ import java.util.BitSet;
 import java.util.List;
 import java.util.Set;
 
-import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstraPoc.Completion.EXHAUSTED;
-import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstraPoc.Completion.MAX_VISITED_STATES;
-import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstraPoc.SearchDirection.FORWARD;
-import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstraPoc.SearchDirection.REVERSE;
+import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.Completion.EXHAUSTED;
+import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.Completion.MAX_VISITED_STATES;
+import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.SearchDirection.FORWARD;
+import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.SearchDirection.REVERSE;
 import static org.assertj.core.api.Assertions.assertThat;
 
-class EdgeKeyMultiTargetDijkstraPocTest {
+class EdgeKeyMultiTargetDijkstraTest {
 
     @Test
     void retainsOnlyPortalsWithinOneKilometerOfTheShortestInsideDistance() {
@@ -25,7 +29,7 @@ class EdgeKeyMultiTargetDijkstraPocTest {
         EdgeIteratorState withinTolerance = graph.edge(0, 2).setDistance(1_099);
         EdgeIteratorState outsideTolerance = graph.edge(0, 3).setDistance(1_101);
 
-        EdgeKeyMultiTargetDijkstraPoc.SearchResult result = EdgeKeyMultiTargetDijkstraPoc.search(
+        EdgeKeyMultiTargetDijkstra.SearchResult result = EdgeKeyMultiTargetDijkstra.search(
                 graph,
                 new DistanceWeighting(),
                 0,
@@ -54,7 +58,7 @@ class EdgeKeyMultiTargetDijkstraPocTest {
         Weighting weighting = new RestrictedTurnDistanceWeighting(
                 restrictedArrival.getEdge(), 1, exit.getEdge());
 
-        EdgeKeyMultiTargetDijkstraPoc.SearchResult result = EdgeKeyMultiTargetDijkstraPoc.search(
+        EdgeKeyMultiTargetDijkstra.SearchResult result = EdgeKeyMultiTargetDijkstra.search(
                 graph,
                 weighting,
                 0,
@@ -79,7 +83,7 @@ class EdgeKeyMultiTargetDijkstraPocTest {
         Weighting weighting = new RestrictedTurnDistanceWeighting(
                 portalEdge.getEdge(), 1, restrictedExit.getEdge());
 
-        EdgeKeyMultiTargetDijkstraPoc.SearchResult result = EdgeKeyMultiTargetDijkstraPoc.search(
+        EdgeKeyMultiTargetDijkstra.SearchResult result = EdgeKeyMultiTargetDijkstra.search(
                 graph,
                 weighting,
                 3,
@@ -110,7 +114,7 @@ class EdgeKeyMultiTargetDijkstraPocTest {
                 new SearchAudit(),
                 graph.getEdges());
 
-        EdgeKeyMultiTargetDijkstraPoc.SearchResult result = EdgeKeyMultiTargetDijkstraPoc.search(
+        EdgeKeyMultiTargetDijkstra.SearchResult result = EdgeKeyMultiTargetDijkstra.search(
                 graph,
                 weighting,
                 0,
@@ -131,7 +135,7 @@ class EdgeKeyMultiTargetDijkstraPocTest {
         graph.edge(0, 1).setDistance(1);
         EdgeIteratorState unreachable = graph.edge(2, 3).setDistance(1);
 
-        EdgeKeyMultiTargetDijkstraPoc.SearchResult exhausted = EdgeKeyMultiTargetDijkstraPoc.search(
+        EdgeKeyMultiTargetDijkstra.SearchResult exhausted = EdgeKeyMultiTargetDijkstra.search(
                 graph,
                 new DistanceWeighting(),
                 0,
@@ -143,7 +147,7 @@ class EdgeKeyMultiTargetDijkstraPocTest {
         assertThat(exhausted.completion()).isEqualTo(EXHAUSTED);
         assertThat(exhausted.provenNoRoute()).isTrue();
 
-        EdgeKeyMultiTargetDijkstraPoc.SearchResult interrupted = EdgeKeyMultiTargetDijkstraPoc.search(
+        EdgeKeyMultiTargetDijkstra.SearchResult interrupted = EdgeKeyMultiTargetDijkstra.search(
                 graph,
                 new DistanceWeighting(),
                 0,
@@ -156,11 +160,48 @@ class EdgeKeyMultiTargetDijkstraPocTest {
         assertThat(interrupted.provenNoRoute()).isFalse();
     }
 
-    private static EdgeKeyMultiTargetDijkstraPoc.Portal portal(
+    @Test
+    void findsAPortalOnTheOriginalEdgeFromAQueryGraphVirtualStart() {
+        BaseGraph baseGraph = graph(2);
+        EdgeIteratorState baseEdge = baseGraph.edge(0, 1).setDistance(1_000);
+        Snap snap = new Snap(0, 0.005);
+        snap.setClosestEdge(baseEdge);
+        snap.setClosestNode(baseEdge.getBaseNode());
+        snap.setSnappedPosition(Snap.Position.EDGE);
+        snap.setWayIndex(0);
+        snap.setQueryDistance(0);
+        snap.setSnappedPoint(new GHPoint3D(0, 0.005, Double.NaN));
+        QueryGraph queryGraph = QueryGraph.create(baseGraph, snap);
+
+        EdgeKeyMultiTargetDijkstra.SearchResult result = EdgeKeyMultiTargetDijkstra.search(
+                queryGraph,
+                new DistanceWeighting(),
+                snap.getClosestNode(),
+                List.of(portal("exit", baseEdge, 1)),
+                FORWARD,
+                1_000,
+                100,
+                Duration.ofSeconds(1));
+
+        assertThat(result.candidates()).containsOnlyKeys("exit");
+        assertThat(result.minimumDistanceMeters()).isBetween(550.0, 560.0);
+    }
+
+    private static EdgeKeyMultiTargetDijkstra.Portal portal(
             String id,
             EdgeIteratorState edge,
             double fraction) {
-        return new EdgeKeyMultiTargetDijkstraPoc.Portal(id, edge.getEdgeKey(), fraction);
+        double baseLat = edge.getBaseNode() * 0.0;
+        double baseLng = edge.getBaseNode() * 0.01;
+        double adjacentLat = edge.getAdjNode() * 0.0;
+        double adjacentLng = edge.getAdjNode() * 0.01;
+        return new EdgeKeyMultiTargetDijkstra.Portal(
+                id,
+                edge.getEdgeKey(),
+                fraction,
+                new Wgs84Coordinate(
+                        baseLng + (adjacentLng - baseLng) * fraction,
+                        baseLat + (adjacentLat - baseLat) * fraction));
     }
 
     private static BaseGraph graph(int nodes) {

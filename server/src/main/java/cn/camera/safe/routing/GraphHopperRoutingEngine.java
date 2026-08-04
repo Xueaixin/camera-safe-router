@@ -8,6 +8,7 @@ import com.graphhopper.ResponsePath;
 import com.graphhopper.util.Parameters;
 import com.graphhopper.util.PointList;
 import com.graphhopper.util.details.PathDetail;
+import com.graphhopper.util.exceptions.MaximumNodesExceededException;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -17,6 +18,8 @@ import static com.graphhopper.util.Parameters.Details.EDGE_KEY;
 
 @Component
 public final class GraphHopperRoutingEngine implements RoutingEngine {
+    private static final long INTERNAL_TIMEOUT_GRACE_MILLIS = 500;
+
     private final GraphHopperManager graphManager;
     private final AppProperties properties;
 
@@ -37,17 +40,19 @@ public final class GraphHopperRoutingEngine implements RoutingEngine {
         request.getHints().putObject(
                 Parameters.Routing.MAX_VISITED_NODES, properties.routing().maxVisitedNodes());
         request.getHints().putObject(
-                Parameters.Routing.TIMEOUT_MS, properties.routing().requestTimeout().toMillis());
+                Parameters.Routing.TIMEOUT_MS,
+                properties.routing().requestTimeout().toMillis() + INTERNAL_TIMEOUT_GRACE_MILLIS);
 
         SearchAudit audit = new SearchAudit();
         GHResponse response = graphManager.requireHopper().route(request, snapshot.blockedEdges(), audit);
         if (response.hasErrors()) {
-            boolean pointNotFound = response.getErrors().stream()
-                    .anyMatch(error -> error.getClass().getSimpleName().contains("PointNotFound"));
-            throw new RoutingEngineException(
-                    pointNotFound ? RoutingEngineException.Reason.POINT_NOT_FOUND
-                            : RoutingEngineException.Reason.NO_ROUTE,
-                    pointNotFound ? "路线点无法吸附到路网" : "未找到可用路线");
+            RoutingEngineException.Reason reason = classifyErrors(response.getErrors());
+            String message = switch (reason) {
+                case POINT_NOT_FOUND -> "路线点无法吸附到路网";
+                case RESOURCE_LIMIT -> "路线搜索达到资源上限";
+                case NO_ROUTE -> "未找到可用路线";
+            };
+            throw new RoutingEngineException(reason, message);
         }
 
         ResponsePath best = response.getBest();
@@ -67,6 +72,17 @@ public final class GraphHopperRoutingEngine implements RoutingEngine {
                 audit.edgeChecks(),
                 audit.virtualEdgeChecks(),
                 audit.blockedRejections());
+    }
+
+    static RoutingEngineException.Reason classifyErrors(List<Throwable> errors) {
+        if (errors.stream().anyMatch(
+                error -> error.getClass().getSimpleName().contains("PointNotFound"))) {
+            return RoutingEngineException.Reason.POINT_NOT_FOUND;
+        }
+        if (errors.stream().anyMatch(MaximumNodesExceededException.class::isInstance)) {
+            return RoutingEngineException.Reason.RESOURCE_LIMIT;
+        }
+        return RoutingEngineException.Reason.NO_ROUTE;
     }
 
     private static void rejectBlockedEdgesInExtractedPath(
