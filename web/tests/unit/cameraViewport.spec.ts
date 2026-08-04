@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { createCameraViewportController } from '@/composables/useCameraViewport';
+import { ApiClientError } from '@/services/errors';
 import type { ApiClient } from '@/services/apiClient';
 import type { CameraPage } from '@/types/api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from '@/types/coordinate';
@@ -102,6 +103,35 @@ describe('camera viewport controller', () => {
 
     expect(onData).toHaveBeenCalledTimes(1);
     expect(onData.mock.calls[0]?.[0][0]?.id).toBe('new');
+    controller.stop();
+    vi.useRealTimers();
+  });
+
+  it('shows the backend camera query error instead of replacing it with a generic message', async () => {
+    vi.useFakeTimers();
+    const map = new MapStub();
+    const onError = vi.fn();
+    const api = apiWithList(async () => {
+      throw new ApiClientError(422, {
+        code: 'CAMERA_QUERY_RESULT_LIMIT_EXCEEDED',
+        message: '查询范围内点位超过服务返回上限，请放大地图后重试',
+        requestId: 'request-1',
+        timestamp: '2026-08-04T00:00:00Z',
+      });
+    });
+    const controller = createCameraViewportController(
+      map,
+      api,
+      { onLoading: vi.fn(), onData: vi.fn(), onError },
+      100,
+    );
+
+    controller.start();
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(onError).toHaveBeenLastCalledWith(
+      '查询范围内点位超过服务返回上限，请放大地图后重试',
+    );
     controller.stop();
     vi.useRealTimers();
   });

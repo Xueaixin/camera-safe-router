@@ -101,6 +101,12 @@ const ERROR_PRESENTATIONS: Record<ApiErrorCode, RouteErrorPresentation> = {
     message: '当前没有可用的限制点位快照，请稍后重试。',
     retryable: true,
   },
+  CAMERA_QUERY_RESULT_LIMIT_EXCEEDED: {
+    state: 'unavailable',
+    title: '点位显示范围过大',
+    message: '请放大地图后重新加载当前范围内的点位。',
+    retryable: true,
+  },
   REFRESH_ALREADY_RUNNING: {
     state: 'unavailable',
     title: '点位正在更新',

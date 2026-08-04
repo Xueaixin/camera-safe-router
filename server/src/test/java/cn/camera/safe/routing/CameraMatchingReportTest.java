@@ -156,7 +156,6 @@ class CameraMatchingReportTest {
                         temporaryDirectory.resolve("snapshots").toString(),
                         true,
                         10_000,
-                        1,
                         updateProperties()),
                 new AppProperties.Admin(true));
     }

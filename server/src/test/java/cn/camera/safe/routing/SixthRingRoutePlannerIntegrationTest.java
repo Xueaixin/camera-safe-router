@@ -186,7 +186,6 @@ class SixthRingRoutePlannerIntegrationTest {
                         configuration.graphCache().resolve("production-planner-test-snapshots").toString(),
                         true,
                         10_000,
-                        1,
                         updateProperties()),
                 new AppProperties.Admin(true));
     }

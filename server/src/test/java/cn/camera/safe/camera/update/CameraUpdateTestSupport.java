@@ -49,7 +49,6 @@ public final class CameraUpdateTestSupport {
                         root.resolve("snapshots").toString(),
                         true,
                         100,
-                        1,
                         update),
                 new AppProperties.Admin(true));
     }

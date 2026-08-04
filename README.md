@@ -279,7 +279,7 @@ npm run build
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | `POST` | `/api/v1/routes` | 规划零摄像头冲突路线 |
-| `GET` | `/api/v1/cameras` | 按地图范围查询点位 |
+| `GET` | `/api/v1/cameras` | 按地图范围查询点位；按实际命中数量保护响应规模 |
 | `GET` | `/api/v1/camera-snapshots/current` | 查询当前快照状态 |
 | `POST` | `/api/v1/admin/camera-snapshots/refresh` | 本机触发摄像头快照刷新 |
 | `POST` | `/api/v1/admin/camera-data/update` | 本机立即下载、校验并发布摄像头数据 |
@@ -302,6 +302,7 @@ npm run build
 - [京津冀摄像头匹配验证报告](docs/京津冀摄像头匹配验证报告.md)
 - [京津冀路线回归报告](docs/京津冀路线回归报告.md)
 - [京津冀候选路线回归报告](docs/京津冀候选路线回归报告.md)
+- [六环东南西北真实路线回归报告](docs/六环东南西北真实路线回归报告.md)
 
 ## Git 仓库状态
 

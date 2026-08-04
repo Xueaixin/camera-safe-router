@@ -39,7 +39,6 @@ app:
     snapshot-path: ${CAMERA_SNAPSHOT_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/snapshots}
     source-coordinate-verified: ${CAMERA_SOURCE_COORDINATE_VERIFIED:true}
     max-bbox-results: ${CAMERA_MAX_BBOX_RESULTS:10000}
-    max-bbox-span-degrees: ${CAMERA_MAX_BBOX_SPAN_DEGREES:1.0}
     update:
       enabled: ${CAMERA_UPDATE_ENABLED:false}
       source-url: ${CAMERA_UPDATE_SOURCE_URL:https://www.jjz365.cn/CameraData/GetAllRing}

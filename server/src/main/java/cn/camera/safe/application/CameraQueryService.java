@@ -54,8 +54,9 @@ public final class CameraQueryService {
                 .limit(properties.cameras().maxBboxResults() + 1L)
                 .toList();
         if (matches.size() > properties.cameras().maxBboxResults()) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST,
-                    ErrorCode.INVALID_REQUEST, "查询范围内点位过多，请缩小地图范围");
+            throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,
+                    ErrorCode.CAMERA_QUERY_RESULT_LIMIT_EXCEEDED,
+                    "查询范围内点位超过服务返回上限，请放大地图后重试");
         }
 
         List<CameraView> views = matches.stream()
@@ -75,11 +76,6 @@ public final class CameraQueryService {
         if (minLng >= maxLng || minLat >= maxLat) {
             throw new BusinessException(HttpStatus.BAD_REQUEST,
                     ErrorCode.INVALID_REQUEST, "查询边界顺序无效");
-        }
-        double maximumSpan = properties.cameras().maxBboxSpanDegrees();
-        if (maxLng - minLng > maximumSpan || maxLat - minLat > maximumSpan) {
-            throw new BusinessException(HttpStatus.BAD_REQUEST,
-                    ErrorCode.INVALID_REQUEST, "查询范围超过服务限制");
         }
     }
 

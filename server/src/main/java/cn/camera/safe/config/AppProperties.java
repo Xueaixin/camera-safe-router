@@ -36,7 +36,6 @@ public record AppProperties(
             @NotBlank String snapshotPath,
             boolean sourceCoordinateVerified,
             @Min(1) int maxBboxResults,
-            @DecimalMin("0.001") @DecimalMax("10.0") double maxBboxSpanDegrees,
             @NotNull @Valid Update update) {
     }
 

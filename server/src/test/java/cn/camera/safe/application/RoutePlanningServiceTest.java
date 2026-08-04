@@ -187,17 +187,17 @@ public class RoutePlanningServiceTest {
                         30, 1, 2,
                         Duration.ofSeconds(2), 10_000),
                 new AppProperties.Cameras(
-                        "cameras", "snapshots", true, 100, 1,
+                        "cameras", "snapshots", true, 100,
                         updateProperties()),
                 new AppProperties.Admin(true));
     }
 
     @Test
-    void mapsCrossBoundarySegmentsAndValidatesOnlyTheSafeSegment() {
+    void mapsCrossBoundarySegmentsAndValidatesTheFullGeometry() {
         GraphHopperManager graphManager = readyGraphManager();
         RoutingSnapshotManager snapshotManager = mock(RoutingSnapshotManager.class);
         RoutingSnapshot snapshot = snapshot(
-                "camera-v1", "blocked-v1", new Wgs84Coordinate(116.5, 40.0));
+                "camera-v1", "blocked-v1", new Wgs84Coordinate(116.8, 40.4));
         when(snapshotManager.current()).thenReturn(Optional.of(snapshot));
         RoutePlanner planner = mock(RoutePlanner.class);
         Wgs84Coordinate start = new Wgs84Coordinate(116.39, 39.90);
@@ -242,6 +242,53 @@ public class RoutePlanningServiceTest {
         assertThat(response.boundaryCrossing().gcj02().lng()).isNotEqualTo(crossing.lng());
         assertThat(response.safeSegment().geometry()).hasSize(2);
         assertThat(response.referenceSegment().geometry()).hasSize(3);
+    }
+
+    @Test
+    void rejectsAConflictOnTheCrossBoundaryReferenceSegment() {
+        GraphHopperManager graphManager = readyGraphManager();
+        RoutingSnapshotManager snapshotManager = mock(RoutingSnapshotManager.class);
+        RoutingSnapshot snapshot = snapshot(
+                "camera-v1", "blocked-v1", new Wgs84Coordinate(116.5, 40.0));
+        when(snapshotManager.current()).thenReturn(Optional.of(snapshot));
+        RoutePlanner planner = mock(RoutePlanner.class);
+        Wgs84Coordinate start = new Wgs84Coordinate(116.39, 39.90);
+        Wgs84Coordinate crossing = new Wgs84Coordinate(116.40, 39.905);
+        Wgs84Coordinate end = new Wgs84Coordinate(116.41, 39.91);
+        RouteLeg safe = new RouteLeg(500, 60_000, List.of(start, crossing));
+        RouteLeg reference = new RouteLeg(
+                1_000,
+                120_000,
+                List.of(crossing, new Wgs84Coordinate(116.5, 40.0), end));
+        SixthRingPortal portal = new SixthRingPortal(
+                "portal-1",
+                10,
+                20,
+                SixthRingPortal.Direction.OUTBOUND,
+                SixthRingPortal.BoundaryRole.OUTER_EXIT,
+                SixthRingPortal.CandidateType.INTERIOR_EDGE,
+                -1,
+                0.5,
+                crossing,
+                "六环路");
+        when(planner.plan(any(), any(), any())).thenReturn(new PlannedRoute(
+                RoutePlanningMode.CROSS_BOUNDARY_OUTBOUND,
+                "boundary-v1",
+                SixthRingPortal.Direction.OUTBOUND,
+                portal,
+                safe,
+                reference,
+                1_500,
+                180_000,
+                List.of(start, crossing, new Wgs84Coordinate(116.5, 40.0), end),
+                100,
+                5,
+                3));
+
+        assertThatThrownBy(() -> service(graphManager, snapshotManager, planner).plan(request()))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.code())
+                                .isEqualTo(ErrorCode.ROUTE_CONFLICT_DETECTED));
     }
 
     @Test

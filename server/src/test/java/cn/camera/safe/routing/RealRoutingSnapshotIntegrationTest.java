@@ -475,7 +475,7 @@ class RealRoutingSnapshotIntegrationTest {
                         30, 2, 4,
                         Duration.ofSeconds(10), 1_000_000),
                 new AppProperties.Cameras(
-                        cameras.toString(), snapshots.toString(), true, 10_000, 1,
+                        cameras.toString(), snapshots.toString(), true, 10_000,
                         updateProperties()),
                 new AppProperties.Admin(true));
     }

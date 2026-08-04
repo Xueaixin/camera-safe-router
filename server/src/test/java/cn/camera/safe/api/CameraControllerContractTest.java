@@ -15,6 +15,7 @@ import cn.camera.safe.routing.RoutingSnapshotManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -93,6 +94,24 @@ class CameraControllerContractTest {
         mvc.perform(get("/api/v1/camera-snapshots/current"))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("CAMERA_SNAPSHOT_NOT_READY"));
+    }
+
+    @Test
+    void returnsAnExplicitErrorWhenTheActualCameraResultLimitIsExceeded() throws Exception {
+        when(queryService.query(anyDouble(), anyDouble(), anyDouble(), anyDouble(), eq(CoordinateSystem.GCJ02)))
+                .thenThrow(new BusinessException(
+                        HttpStatus.UNPROCESSABLE_ENTITY,
+                        ErrorCode.CAMERA_QUERY_RESULT_LIMIT_EXCEEDED,
+                        "查询范围内点位超过服务返回上限，请放大地图后重试"));
+
+        mvc.perform(get("/api/v1/cameras")
+                        .param("minLng", "115")
+                        .param("minLat", "39")
+                        .param("maxLng", "117")
+                        .param("maxLat", "41")
+                        .param("coordinateSystem", "GCJ02"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("CAMERA_QUERY_RESULT_LIMIT_EXCEEDED"));
     }
 
     static RoutingSnapshot snapshot() {

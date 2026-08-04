@@ -82,6 +82,6 @@ GraphHopper 11 的 `DijkstraOneToMany` 不适用：node-based 模式拒绝带 tu
 - 历史算法 POC：`server/src/test/java/cn/camera/safe/routing/EdgeKeyMultiTargetDijkstraPoc.java`
 - 生产算法：`server/src/main/java/cn/camera/safe/routing/EdgeKeyMultiTargetDijkstra.java`
 - 正式规划器真实回归：`server/src/test/java/cn/camera/safe/routing/SixthRingRoutePlannerIntegrationTest.java`
-- 合成图测试：`server/src/test/java/cn/camera/safe/routing/EdgeKeyMultiTargetDijkstraPocTest.java`
+- 生产算法合成图测试：`server/src/test/java/cn/camera/safe/routing/EdgeKeyMultiTargetDijkstraTest.java`
 - 真实图测试：`server/src/test/java/cn/camera/safe/routing/SixthRingMultiTargetSearchPocTest.java`
 - 外部完整报告：`E:\camera-safe-routing-data\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-multitarget-search-report.md`

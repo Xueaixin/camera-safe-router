@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.IntStream;
 
 import static cn.camera.safe.application.RoutePlanningServiceTest.properties;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,7 +29,7 @@ import static org.mockito.Mockito.when;
 
 class CameraQueryServiceTest {
     @Test
-    void returnsCoordinatesInTheExplicitRequestedSystemAndLimitsBboxSpan() {
+    void returnsCoordinatesInTheExplicitRequestedSystemWithoutAnArbitrarySpanLimit() {
         RoutingSnapshotManager manager = mock(RoutingSnapshotManager.class);
         when(manager.current()).thenReturn(Optional.of(snapshot()));
         AppProperties properties = properties();
@@ -43,20 +44,42 @@ class CameraQueryServiceTest {
             assertThat(camera.lat()).isEqualTo(39.9);
         });
 
-        assertThatThrownBy(() -> service.query(
-                115, 39, 117, 41, CoordinateSystem.WGS84))
+        CameraPage wide = service.query(
+                115.840917, 39.736757, 116.973883, 40.071235, CoordinateSystem.GCJ02);
+        assertThat(wide.coordinateSystem()).isEqualTo(CoordinateSystem.GCJ02);
+        assertThat(wide.items()).hasSize(1);
+    }
+
+    @Test
+    void rejectsOnlyWhenTheActualResultCountExceedsTheConfiguredLimit() {
+        RoutingSnapshotManager manager = mock(RoutingSnapshotManager.class);
+        when(manager.current()).thenReturn(Optional.of(snapshot(101)));
+        CameraQueryService service = new CameraQueryService(
+                manager, new CoordinateConverter(), properties());
+
+        assertThatThrownBy(() -> service.query(115, 39, 117, 41, CoordinateSystem.WGS84))
                 .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.code()).isEqualTo(ErrorCode.INVALID_REQUEST));
+                        exception -> {
+                            assertThat(exception.code())
+                                    .isEqualTo(ErrorCode.CAMERA_QUERY_RESULT_LIMIT_EXCEEDED);
+                            assertThat(exception.status().value()).isEqualTo(422);
+                        });
     }
 
     private static RoutingSnapshot snapshot() {
+        return snapshot(1);
+    }
+
+    private static RoutingSnapshot snapshot(int cameraCount) {
         CoordinateConverter converter = new CoordinateConverter();
         Gcj02Coordinate gcj = new Gcj02Coordinate(116.4, 39.9);
-        CameraPoint camera = new CameraPoint(
-                "camera", "district", gcj, converter.toWgs84(gcj),
-                "address", "type", null);
+        List<CameraPoint> points = IntStream.range(0, cameraCount)
+                .mapToObj(index -> new CameraPoint(
+                        "camera-" + index, "district", gcj, converter.toWgs84(gcj),
+                        "address", "type", null))
+                .toList();
         CameraSnapshot cameras = new CameraSnapshot(
-                "camera-v1", "hash", Instant.EPOCH, List.of(camera));
+                "camera-v1", "hash", Instant.EPOCH, points);
         return new RoutingSnapshot(
                 cameras,
                 new CameraSpatialIndex(cameras.cameras()),

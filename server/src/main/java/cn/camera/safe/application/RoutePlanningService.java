@@ -96,15 +96,12 @@ public final class RoutePlanningService {
         }
 
         PlannedRoute plannedRoute = calculate(start, end, snapshot);
-        RouteLeg safeLeg = plannedRoute.safeSegment();
-        if (safeLeg != null) {
-            SafetyValidationResult safety = safetyValidator.validate(safeLeg.geometry(), snapshot);
-            if (!safety.compliant()) {
-                throw new BusinessException(HttpStatus.CONFLICT,
-                        ErrorCode.ROUTE_CONFLICT_DETECTED,
-                        "路线独立安全校验检测到摄像头冲突",
-                        Map.of("cameraConflictCount", safety.conflictCount()));
-            }
+        SafetyValidationResult safety = safetyValidator.validate(plannedRoute.geometry(), snapshot);
+        if (!safety.compliant()) {
+            throw new BusinessException(HttpStatus.CONFLICT,
+                    ErrorCode.ROUTE_CONFLICT_DETECTED,
+                    "路线独立安全校验检测到摄像头冲突",
+                    Map.of("cameraConflictCount", safety.conflictCount()));
         }
 
         String routeId = UUID.randomUUID().toString();

@@ -149,6 +149,7 @@ export function mockApiError(code: ApiErrorCode) {
     ROUTE_CONFLICT_DETECTED: '路线安全校验发现冲突',
     ROUTING_NOT_READY: '路由服务尚未就绪',
     CAMERA_SNAPSHOT_NOT_READY: '摄像头快照尚未就绪',
+    CAMERA_QUERY_RESULT_LIMIT_EXCEEDED: '查询范围内点位超过服务返回上限',
     REFRESH_ALREADY_RUNNING: '快照刷新正在运行',
     CAMERA_UPDATE_ALREADY_RUNNING: '摄像头数据更新正在运行',
     CAMERA_UPDATE_FAILED: '摄像头数据更新失败',

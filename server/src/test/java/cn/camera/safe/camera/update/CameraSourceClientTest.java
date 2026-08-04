@@ -103,7 +103,6 @@ class CameraSourceClientTest {
                         originalProperties.cameras().snapshotPath(),
                         originalProperties.cameras().sourceCoordinateVerified(),
                         originalProperties.cameras().maxBboxResults(),
-                        originalProperties.cameras().maxBboxSpanDegrees(),
                         update),
                 originalProperties.admin());
     }

@@ -70,7 +70,6 @@ class CameraUpdateSchedulerTest {
                         enabled.cameras().snapshotPath(),
                         enabled.cameras().sourceCoordinateVerified(),
                         enabled.cameras().maxBboxResults(),
-                        enabled.cameras().maxBboxSpanDegrees(),
                         disabled),
                 enabled.admin());
     }

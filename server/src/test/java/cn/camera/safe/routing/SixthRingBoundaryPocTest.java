@@ -253,7 +253,7 @@ class SixthRingBoundaryPocTest {
                         Duration.ofSeconds(30), 2_000_000),
                 new AppProperties.Cameras(
                         pbf.toString(), graphCache.resolve("poc-snapshots").toString(),
-                        true, 10_000, 1, updateProperties()),
+                        true, 10_000, updateProperties()),
                 new AppProperties.Admin(true));
     }
 

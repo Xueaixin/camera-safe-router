@@ -54,6 +54,9 @@ paths:
       tags: [Cameras]
       operationId: listCameras
       summary: 查询当前地图范围内的摄像头点位
+      description: |
+        查询范围不设置固定经纬度跨度；服务根据当前快照中的实际命中数量保护响应规模。
+        命中数量超过服务上限时返回 CAMERA_QUERY_RESULT_LIMIT_EXCEEDED，客户端应放大地图后重试。
       parameters:
         - name: minLng
           in: query
@@ -85,6 +88,12 @@ paths:
                 $ref: '#/components/schemas/CameraPage'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '422':
+          description: 查询范围内的实际点位数量超过服务返回上限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/camera-snapshots/current:
@@ -589,6 +598,7 @@ components:
         - ROUTE_CONFLICT_DETECTED
         - ROUTING_NOT_READY
         - CAMERA_SNAPSHOT_NOT_READY
+        - CAMERA_QUERY_RESULT_LIMIT_EXCEEDED
         - REFRESH_ALREADY_RUNNING
         - CAMERA_UPDATE_ALREADY_RUNNING
         - CAMERA_UPDATE_FAILED
