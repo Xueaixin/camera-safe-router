@@ -12,7 +12,13 @@ export const MOCK_SEARCH_PLACES = [
   { id: 'place-wangjing', name: '望京SOHO', district: '朝阳区', lng: 116.47, lat: 39.992 },
   { id: 'place-zhongguancun', name: '中关村', district: '海淀区', lng: 116.316, lat: 39.983 },
   { id: 'place-beijing-south', name: '北京南站', district: '丰台区', lng: 116.379, lat: 39.865 },
-  { id: 'place-tianjin-station', name: '天津站', district: '天津市河北区', lng: 117.21, lat: 39.136 },
+  {
+    id: 'place-tianjin-station',
+    name: '天津站',
+    district: '天津市河北区',
+    lng: 117.21,
+    lat: 39.136,
+  },
   {
     id: 'place-shijiazhuang-station',
     name: '石家庄站',
@@ -107,6 +113,8 @@ export function buildMockRoute(
     boundaryVersion: 'fixture-sixth-ring-v1',
     boundaryDirection: null,
     boundaryCrossing: null,
+    navigationHandoff: null,
+    externalHandoff: null,
     safeSegment: {
       distanceMeters: 12640.5,
       durationSeconds: 1680,
@@ -127,6 +135,82 @@ export function buildMockRoute(
         durationSeconds: 420,
         startIndex: 0,
         endIndex: 1,
+      },
+    ],
+  };
+}
+
+export function buildMockCrossBoundaryRoute(
+  request: RouteRequest,
+  routeId = 'route-fixture-cross-001',
+): RouteResponse {
+  const displayCoordinate = (coordinate: RouteRequest['start']) =>
+    coordinate.coordinateSystem === 'WGS84'
+      ? { lng: coordinate.lng + 0.0065, lat: coordinate.lat + 0.0015 }
+      : { lng: coordinate.lng, lat: coordinate.lat };
+  const start = displayCoordinate(request.start);
+  const end = displayCoordinate(request.end);
+  const crossing = { lng: 116.445, lat: 39.94 };
+  const handoff = { lng: 116.46, lat: 39.935 };
+  const safeGeometry = [start, { lng: 116.425, lat: 39.925 }, crossing, handoff];
+  const referenceGeometry = [handoff, end];
+  return {
+    routeId,
+    coordinateSystem: 'GCJ02',
+    planningMode: 'CROSS_BOUNDARY_OUTBOUND',
+    boundaryVersion: 'fixture-sixth-ring-v1',
+    boundaryDirection: 'OUTBOUND',
+    boundaryCrossing: {
+      portalId: 'fixture-outer-exit-001',
+      roadName: '立汤路',
+      direction: 'OUTBOUND',
+      boundaryRole: 'OUTER_EXIT',
+      wgs84: { lng: crossing.lng - 0.0065, lat: crossing.lat - 0.0015 },
+      gcj02: crossing,
+    },
+    navigationHandoff: {
+      wgs84: { lng: handoff.lng - 0.0065, lat: handoff.lat - 0.0015 },
+      gcj02: handoff,
+      boundaryClearanceMeters: 260,
+      roadName: '立汤路辅路',
+    },
+    externalHandoff: {
+      wgs84: { lng: handoff.lng - 0.0065, lat: handoff.lat - 0.0015 },
+      gcj02: handoff,
+      boundaryClearanceMeters: 260,
+      poiSearchRadiusMeters: 200,
+    },
+    safeSegment: {
+      distanceMeters: 29200,
+      durationSeconds: 2520,
+      geometry: safeGeometry,
+    },
+    referenceSegment: {
+      distanceMeters: 86600,
+      durationSeconds: 4920,
+      geometry: referenceGeometry,
+    },
+    distanceMeters: 115800,
+    durationSeconds: 7440,
+    cameraConflictCount: 0,
+    cameraSnapshotVersion: 'fixture-camera-v1',
+    blockedEdgeVersion: 'fixture-blocked-v1',
+    geometry: [...safeGeometry, end],
+    steps: [
+      {
+        instruction: '沿合规道路驶出六环',
+        roadName: '立汤路',
+        distanceMeters: 28600,
+        durationSeconds: 2460,
+        startIndex: 0,
+        endIndex: 2,
+      },
+      {
+        instruction: '继续前往终点',
+        distanceMeters: 87200,
+        durationSeconds: 4980,
+        startIndex: 2,
+        endIndex: 4,
       },
     ],
   };

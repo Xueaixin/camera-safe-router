@@ -1,6 +1,10 @@
 package cn.camera.safe.routing;
 
 import cn.camera.safe.coordinate.Wgs84Coordinate;
+import com.graphhopper.routing.ev.BooleanEncodedValue;
+import com.graphhopper.routing.ev.EnumEncodedValue;
+import com.graphhopper.routing.ev.RoadClass;
+import com.graphhopper.routing.ev.RoadEnvironment;
 import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.Graph;
 import com.graphhopper.util.EdgeIteratorState;
@@ -14,12 +18,16 @@ final class RouteGeometryAssembler {
     private RouteGeometryAssembler() {
     }
 
-    static RouteLeg insideLeg(
+    static TracedRouteLeg insideLeg(
             Graph graph,
             Weighting weighting,
             EdgeKeyMultiTargetDijkstra.PortalPath path,
-            SixthRingPortal.Direction direction) {
+            SixthRingPortal.Direction direction,
+            EnumEncodedValue<RoadClass> roadClass,
+            BooleanEncodedValue roadClassLink,
+            EnumEncodedValue<RoadEnvironment> roadEnvironment) {
         List<Wgs84Coordinate> geometry = new ArrayList<>();
+        List<RouteTracePoint> trace = new ArrayList<>();
         long durationMillis = 0;
         EdgeIteratorState previous = null;
         List<Integer> edgeKeys = path.edgeKeys();
@@ -48,7 +56,14 @@ final class RouteGeometryAssembler {
                     fromFraction = path.terminalFractionFromBase();
                 }
             }
-            appendDistinct(geometry, edgeSlice(edge, fromFraction, toFraction));
+            appendTrace(
+                    geometry,
+                    trace,
+                    edgeSlice(edge, fromFraction, toFraction),
+                    edge,
+                    roadClass,
+                    roadClassLink,
+                    roadEnvironment);
             double traversedFraction = Math.max(0, toFraction - fromFraction);
             long edgeMillis = Math.max(0, weighting.calcEdgeMillis(edge, false));
             durationMillis = saturatedAdd(
@@ -64,7 +79,18 @@ final class RouteGeometryAssembler {
                 geometry.set(0, crossing);
             }
         }
-        return new RouteLeg(path.distanceMeters(), durationMillis, geometry);
+        List<RouteTracePoint> normalizedTrace = trace.stream()
+                .map(point -> new RouteTracePoint(
+                        point.geometryIndex(),
+                        geometry.get(point.geometryIndex()),
+                        point.roadName(),
+                        point.roadClass(),
+                        point.roadClassLink(),
+                        point.roadEnvironment()))
+                .toList();
+        return new TracedRouteLeg(
+                new RouteLeg(path.distanceMeters(), durationMillis, geometry),
+                normalizedTrace);
     }
 
     @SafeVarargs
@@ -137,6 +163,32 @@ final class RouteGeometryAssembler {
             if (target.isEmpty() || !target.getLast().equals(point)) {
                 target.add(point);
             }
+        }
+    }
+
+    private static void appendTrace(
+            List<Wgs84Coordinate> geometry,
+            List<RouteTracePoint> trace,
+            List<Wgs84Coordinate> points,
+            EdgeIteratorState edge,
+            EnumEncodedValue<RoadClass> roadClass,
+            BooleanEncodedValue roadClassLink,
+            EnumEncodedValue<RoadEnvironment> roadEnvironment) {
+        for (Wgs84Coordinate point : points) {
+            int geometryIndex;
+            if (!geometry.isEmpty() && geometry.getLast().equals(point)) {
+                geometryIndex = geometry.size() - 1;
+            } else {
+                geometry.add(point);
+                geometryIndex = geometry.size() - 1;
+            }
+            trace.add(new RouteTracePoint(
+                    geometryIndex,
+                    point,
+                    edge.getName(),
+                    edge.get(roadClass),
+                    edge.get(roadClassLink),
+                    edge.get(roadEnvironment)));
         }
     }
 

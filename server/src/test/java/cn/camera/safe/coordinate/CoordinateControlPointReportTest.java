@@ -23,7 +23,7 @@ class CoordinateControlPointReportTest {
 
         CoordinateConverter converter = new CoordinateConverter();
         StringBuilder report = new StringBuilder("# 摄像头坐标控制点候选\n\n")
-                .append("本文件只生成候选点，不代表源坐标系已经确认。请按 `docs/coordinate-contract.md` 在高德和 OSM 人工核对。\n\n")
+                .append("本文件只生成候选点，不代表源坐标系已经确认。请按 `docs/reference/坐标系与接口约定.md` 在高德和 OSM 人工核对。\n\n")
                 .append("| ID | 地址 | 原始经度 | 原始纬度 | GCJ-02 转 WGS84 经度 | GCJ-02 转 WGS84 纬度 | 高德结论 | OSM 结论 |\n")
                 .append("|---|---|---:|---:|---:|---:|---|---|\n");
         for (int sample = 0; sample < 20; sample++) {

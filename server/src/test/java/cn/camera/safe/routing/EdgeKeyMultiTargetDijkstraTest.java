@@ -187,6 +187,31 @@ class EdgeKeyMultiTargetDijkstraTest {
         assertThat(result.minimumDistanceMeters()).isBetween(550.0, 560.0);
     }
 
+    @Test
+    void recordsAPortalPrefixButDoesNotContinueAcrossAForbiddenBoundaryEdge() {
+        BaseGraph graph = graph(3);
+        EdgeIteratorState crossing = graph.edge(0, 1).setDistance(100);
+        EdgeIteratorState beyond = graph.edge(1, 2).setDistance(100);
+        EdgeTraversalConstraint constraint = (edge, fraction) ->
+                edge.getEdge() != crossing.getEdge() || fraction <= 0.5;
+
+        EdgeKeyMultiTargetDijkstra.SearchResult result = EdgeKeyMultiTargetDijkstra.search(
+                graph,
+                new DistanceWeighting(),
+                0,
+                List.of(
+                        portal("boundary", crossing, 0.5),
+                        portal("forbidden", beyond, 1)),
+                FORWARD,
+                constraint,
+                1_000,
+                100,
+                Duration.ofSeconds(1));
+
+        assertThat(result.candidates()).containsOnlyKeys("boundary");
+        assertThat(result.candidates().get("boundary").distanceMeters()).isEqualTo(50);
+    }
+
     private static EdgeKeyMultiTargetDijkstra.Portal portal(
             String id,
             EdgeIteratorState edge,

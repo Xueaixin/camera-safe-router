@@ -33,23 +33,61 @@ describe('route response validation', () => {
         wgs84: { lng: 116.4, lat: 39.9 },
         gcj02: { lng: 116.406, lat: 39.901 },
       },
+      navigationHandoff: {
+        wgs84: { lng: 116.405, lat: 39.9 },
+        gcj02: { lng: 116.411, lat: 39.901 },
+        boundaryClearanceMeters: 320,
+        roadName: '普通道路',
+      },
+      externalHandoff: {
+        wgs84: { lng: 116.41, lat: 39.9 },
+        gcj02: { lng: 116.416, lat: 39.901 },
+        boundaryClearanceMeters: 260,
+        poiSearchRadiusMeters: 200,
+      },
+      safeSegment: {
+        distanceMeters: 4000,
+        durationSeconds: 450,
+        geometry: [base.geometry[0], { lng: 116.411, lat: 39.901 }],
+      },
       referenceSegment: {
         distanceMeters: 8000,
         durationSeconds: 900,
-        geometry: base.geometry,
+        geometry: [{ lng: 116.411, lat: 39.901 }, base.geometry[base.geometry.length - 1]!],
       },
     });
 
     expect(response.boundaryCrossing?.portalId).toBe('P0001');
+    expect(response.navigationHandoff?.roadName).toBe('普通道路');
+    expect(response.externalHandoff?.poiSearchRadiusMeters).toBe(200);
+  });
+
+  it('requires an external handoff for cross-boundary routes', () => {
+    const base = buildMockRoute(request);
+    expect(() =>
+      parseRouteResponse({
+        ...base,
+        planningMode: 'CROSS_BOUNDARY_OUTBOUND',
+        boundaryDirection: 'OUTBOUND',
+        boundaryCrossing: {
+          portalId: 'P0001',
+          direction: 'OUTBOUND',
+          boundaryRole: 'OUTER_EXIT',
+          wgs84: { lng: 116.4, lat: 39.9 },
+          gcj02: { lng: 116.406, lat: 39.901 },
+        },
+        referenceSegment: base.safeSegment,
+      }),
+    ).toThrow('路线规划模式与分段结构不一致');
   });
 
   it('rejects missing nullable fields and mode/segment mismatches', () => {
     const base = buildMockRoute(request);
     const { boundaryCrossing: _boundaryCrossing, ...missingField } = base;
     expect(() => parseRouteResponse(missingField)).toThrow('响应缺少字段 boundaryCrossing');
-    expect(() =>
-      parseRouteResponse({ ...base, planningMode: 'EXTERNAL_ONLY' }),
-    ).toThrow('路线规划模式与分段结构不一致');
+    expect(() => parseRouteResponse({ ...base, planningMode: 'EXTERNAL_ONLY' })).toThrow(
+      '路线规划模式与分段结构不一致',
+    );
     expect(() =>
       parseRouteResponse({
         ...base,

@@ -17,6 +17,7 @@ import {
 
 export type RoutePlanningState = 'idle' | 'planning' | 'success' | RouteFailureState;
 export type PlanningKind = 'initial' | 'reroute' | null;
+export type RouteViewMode = 'full' | 'safe-segment';
 
 function toInputCoordinate(place: SelectedPlace): InputCoordinate {
   return {
@@ -43,6 +44,7 @@ export const useRouteStore = defineStore('route', () => {
   const start = ref<SelectedPlace | null>(null);
   const end = ref<SelectedPlace | null>(null);
   const route = ref<RouteResponse | null>(null);
+  const routeView = ref<RouteViewMode>('full');
   const state = ref<RoutePlanningState>('idle');
   const planningKind = ref<PlanningKind>(null);
   const lastAttemptKind = ref<PlanningKind>(null);
@@ -53,11 +55,31 @@ export const useRouteStore = defineStore('route', () => {
   const canPlan = computed(() => Boolean(start.value && end.value) && state.value !== 'planning');
   const isPlanning = computed(() => state.value === 'planning');
   const hasRoute = computed(() => route.value !== null);
+  const isCrossBoundary = computed(
+    () =>
+      route.value?.planningMode === 'CROSS_BOUNDARY_OUTBOUND' ||
+      route.value?.planningMode === 'CROSS_BOUNDARY_INBOUND',
+  );
+  const displaySegment = computed(() =>
+    routeView.value === 'safe-segment' && isCrossBoundary.value
+      ? (route.value?.safeSegment ?? null)
+      : null,
+  );
+  const displayGeometry = computed(
+    () => displaySegment.value?.geometry ?? route.value?.geometry ?? [],
+  );
+  const displayDistanceMeters = computed(
+    () => displaySegment.value?.distanceMeters ?? route.value?.distanceMeters ?? 0,
+  );
+  const displayDurationSeconds = computed(
+    () => displaySegment.value?.durationSeconds ?? route.value?.durationSeconds ?? 0,
+  );
 
   function resetResult() {
     activeController?.abort();
     requestSequence.value += 1;
     route.value = null;
+    routeView.value = 'full';
     state.value = 'idle';
     planningKind.value = null;
     lastAttemptKind.value = null;
@@ -84,6 +106,16 @@ export const useRouteStore = defineStore('route', () => {
   function cancelActiveRequest() {
     activeController?.abort();
     activeController = null;
+  }
+
+  function showFullRoute() {
+    routeView.value = 'full';
+  }
+
+  function showSafeSegment() {
+    if (isCrossBoundary.value && route.value?.safeSegment) {
+      routeView.value = 'safe-segment';
+    }
   }
 
   async function plan(client?: ApiClient): Promise<boolean> {
@@ -144,6 +176,7 @@ export const useRouteStore = defineStore('route', () => {
         throw new ProtocolError('路线不是 GCJ02，不能绘制到高德地图');
       }
       route.value = response;
+      routeView.value = 'full';
       state.value = 'success';
       return true;
     } catch (caught: unknown) {
@@ -170,6 +203,7 @@ export const useRouteStore = defineStore('route', () => {
     start,
     end,
     route,
+    routeView,
     state,
     planningKind,
     lastAttemptKind,
@@ -177,12 +211,18 @@ export const useRouteStore = defineStore('route', () => {
     canPlan,
     isPlanning,
     hasRoute,
+    isCrossBoundary,
+    displayGeometry,
+    displayDistanceMeters,
+    displayDurationSeconds,
     setStart,
     setEnd,
     swapEndpoints,
     plan,
     rerouteFromLocation,
     cancelActiveRequest,
+    showFullRoute,
+    showSafeSegment,
     resetResult,
   };
 });

@@ -32,7 +32,8 @@ public final class GraphHopperRoutingEngine implements RoutingEngine {
     public EngineRoute route(
             Wgs84Coordinate start,
             Wgs84Coordinate end,
-            RoutingSnapshot snapshot) {
+            RoutingSnapshot snapshot,
+            EdgeTraversalConstraint traversalConstraint) {
         GHRequest request = new GHRequest(start.lat(), start.lng(), end.lat(), end.lng())
                 .setProfile("car")
                 .setAlgorithm(ASTAR_BI)
@@ -44,7 +45,8 @@ public final class GraphHopperRoutingEngine implements RoutingEngine {
                 properties.routing().requestTimeout().toMillis() + INTERNAL_TIMEOUT_GRACE_MILLIS);
 
         SearchAudit audit = new SearchAudit();
-        GHResponse response = graphManager.requireHopper().route(request, snapshot.blockedEdges(), audit);
+        GHResponse response = graphManager.requireHopper().route(
+                request, snapshot.blockedEdges(), audit, traversalConstraint);
         if (response.hasErrors()) {
             RoutingEngineException.Reason reason = classifyErrors(response.getErrors());
             String message = switch (reason) {

@@ -1,5 +1,10 @@
 import { loadAmap } from './amapLoader';
-import { createCameraPopup, createMapPointPopup } from './mapPopupContent';
+import { buildAmapNavigationUri } from './amapUri';
+import {
+  createCameraPopup,
+  createMapPointPopup,
+  createNavigationHandoffPopup,
+} from './mapPopupContent';
 import type {
   AmapAutoCompleteResult,
   AmapCircle,
@@ -13,7 +18,13 @@ import type {
 } from '@/types/amap';
 import type { CameraView, OutputCoordinate } from '@/types/api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from '@/types/coordinate';
-import type { MapAdapter, MapAdapterCallbacks, MapViewport, PlaceSuggestion } from '@/types/map';
+import type {
+  HandoffMarkerData,
+  MapAdapter,
+  MapAdapterCallbacks,
+  MapViewport,
+  PlaceSuggestion,
+} from '@/types/map';
 import { isRecord } from '@/utils/guards';
 
 function lngLatTuple(coordinate: { lng: number; lat: number }): [number, number] {
@@ -28,26 +39,107 @@ function lngLatFromEvent(event: unknown): AmapLngLat | null {
     : null;
 }
 
-function markerElement(kind: 'start' | 'end' | 'current'): HTMLDivElement {
+function markerElement(kind: 'start' | 'end' | 'current' | 'outbound' | 'inbound'): HTMLDivElement {
   const marker = document.createElement('div');
   marker.className = `map-marker map-marker--${kind}`;
   marker.setAttribute('aria-hidden', 'true');
-  if (kind !== 'current') marker.textContent = kind === 'start' ? '起' : '终';
+  if (kind !== 'current') {
+    const label = document.createElement('span');
+    label.textContent =
+      kind === 'start' ? '起' : kind === 'end' ? '终' : kind === 'outbound' ? '出' : '入';
+    marker.append(label);
+  }
   return marker;
 }
 
+const HANDOFF_LANDMARK_RADIUS_METERS = 200;
+const PRIMARY_TRAFFIC_LANDMARK = /收费站|高速.*(?:入口|出口)|高速公路出入口|互通/;
+const SECONDARY_TRAFFIC_LANDMARK = /交通设施|道路附属设施|路口|桥|立交/;
+
+interface HandoffPoi {
+  value: Record<string, unknown>;
+  name: string;
+  distanceMeters: number;
+  priority: number;
+}
+
+function poiDistance(candidate: Record<string, unknown>): number {
+  const distance =
+    typeof candidate.distance === 'number'
+      ? candidate.distance
+      : typeof candidate.distance === 'string'
+        ? Number(candidate.distance)
+        : Number.NaN;
+  return distance;
+}
+
+function selectHandoffPoi(candidates: unknown[], radius: number): HandoffPoi | null {
+  const eligible = candidates.flatMap((candidate): HandoffPoi[] => {
+    if (!isRecord(candidate) || typeof candidate.name !== 'string') return [];
+    const distanceMeters = poiDistance(candidate);
+    if (!Number.isFinite(distanceMeters) || distanceMeters < 0 || distanceMeters > radius) {
+      return [];
+    }
+    const type = typeof candidate.type === 'string' ? candidate.type : '';
+    const searchable = `${candidate.name} ${type}`;
+    const priority = PRIMARY_TRAFFIC_LANDMARK.test(searchable)
+      ? 0
+      : SECONDARY_TRAFFIC_LANDMARK.test(searchable)
+        ? 1
+        : 2;
+    return [{ value: candidate, name: candidate.name, distanceMeters, priority }];
+  });
+  return (
+    eligible.sort(
+      (left, right) => left.priority - right.priority || left.distanceMeters - right.distanceMeters,
+    )[0] ?? null
+  );
+}
+
+function textValues(value: unknown): string[] {
+  if (typeof value === 'string' && value.trim()) return [value.trim()];
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()));
+}
+
+function appendWithoutOverlap(base: string, value: string): string {
+  if (!value || base.includes(value)) return base;
+  if (value.includes(base)) return value;
+  return `${base}${value}`;
+}
+
+function describeHandoffPoi(regeocode: Record<string, unknown>, poi: HandoffPoi): string {
+  const addressComponent = isRecord(regeocode.addressComponent) ? regeocode.addressComponent : null;
+  let description = '';
+  if (addressComponent) {
+    for (const key of ['province', 'city', 'district', 'township']) {
+      for (const value of textValues(addressComponent[key])) {
+        description = appendWithoutOverlap(description, value);
+      }
+    }
+  }
+  const address = typeof poi.value.address === 'string' ? poi.value.address.trim() : '';
+  description = appendWithoutOverlap(description, address);
+  return appendWithoutOverlap(description, poi.name);
+}
+
 export class AmapMapAdapter implements MapAdapter {
+  private container: HTMLElement | null = null;
   private amap: AmapNamespace | null = null;
   private map: AmapMap | null = null;
   private callbacks: MapAdapterCallbacks | null = null;
   private startMarker: AmapMarker | null = null;
   private endMarker: AmapMarker | null = null;
+  private handoffMarker: AmapMarker | null = null;
+  private handoffMarkerKey: string | null = null;
+  private handoffData: HandoffMarkerData | null = null;
+  private handoffDescription: Promise<string> | null = null;
   private routePolyline: AmapPolyline | null = null;
   private cameraLayer: AmapMassMarks | null = null;
   private currentMarker: AmapMarker | null = null;
   private accuracyCircle: AmapCircle | null = null;
   private infoWindow: AmapInfoWindow | null = null;
-  private infoWindowKind: 'camera' | 'map-point' | null = null;
+  private infoWindowKind: 'camera' | 'map-point' | 'handoff' | null = null;
   private camerasById = new Map<string, CameraView>();
   private viewportListeners = new Set<() => void>();
   private mapClickSequence = 0;
@@ -55,6 +147,7 @@ export class AmapMapAdapter implements MapAdapter {
   private readonly mapClickHandler = (event?: unknown) => void this.handleMapClick(event);
   private readonly viewportHandler = () => this.viewportListeners.forEach((listener) => listener());
   private readonly cameraClickHandler = (event: unknown) => this.handleCameraClick(event);
+  private readonly handoffClickHandler = (event: unknown) => this.handleHandoffClick(event);
 
   constructor(
     private readonly key: string,
@@ -62,6 +155,7 @@ export class AmapMapAdapter implements MapAdapter {
   ) {}
 
   async initialize(container: HTMLElement, callbacks: MapAdapterCallbacks): Promise<void> {
+    this.container = container;
     this.callbacks = callbacks;
     this.amap = await loadAmap(this.key, this.securityCode);
     this.map = new this.amap.Map(container, {
@@ -79,6 +173,7 @@ export class AmapMapAdapter implements MapAdapter {
     this.clearRoute();
     this.clearCameras();
     this.setEndpointMarkers(null, null);
+    this.setHandoffMarker(null);
     this.setCurrentLocation(null);
     this.closeInfoWindow();
     this.mapClickSequence += 1;
@@ -90,6 +185,7 @@ export class AmapMapAdapter implements MapAdapter {
     }
     this.map = null;
     this.amap = null;
+    this.container = null;
     this.callbacks = null;
     this.viewportListeners.clear();
   }
@@ -156,6 +252,45 @@ export class AmapMapAdapter implements MapAdapter {
     this.endMarker = this.updateEndpointMarker(this.endMarker, end, 'end');
   }
 
+  setHandoffMarker(data: HandoffMarkerData | null) {
+    const key = data
+      ? [
+          data.crossing.portalId,
+          data.crossing.direction,
+          data.navigationHandoff.gcj02.lng,
+          data.navigationHandoff.gcj02.lat,
+          data.outerEndpoint.lng,
+          data.outerEndpoint.lat,
+        ].join(':')
+      : null;
+    if (key !== null && key === this.handoffMarkerKey && this.handoffMarker) {
+      this.handoffData = data;
+      return;
+    }
+    if (this.handoffMarker) {
+      this.handoffMarker.off('click', this.handoffClickHandler);
+      this.handoffMarker.setMap(null);
+    }
+    this.handoffMarker = null;
+    this.handoffMarkerKey = key;
+    this.handoffData = data;
+    this.handoffDescription = null;
+    if (this.infoWindowKind === 'handoff') this.closeInfoWindow();
+    if (!this.amap || !this.map || !data) return;
+
+    const outbound = data.crossing.direction === 'OUTBOUND';
+    this.handoffDescription = this.resolveNavigationHandoffDescription(data).catch(() => '');
+    this.handoffMarker = new this.amap.Marker({
+      map: this.map,
+      position: lngLatTuple(data.navigationHandoff.gcj02),
+      content: markerElement(outbound ? 'outbound' : 'inbound'),
+      anchor: 'bottom-center',
+      zIndex: 58,
+      title: outbound ? '环内路线终点' : '环内路线起点',
+    });
+    this.handoffMarker.on('click', this.handoffClickHandler);
+  }
+
   setRoute(geometry: OutputCoordinate[]) {
     if (!this.amap || !this.map) return;
     const path = geometry.map(lngLatTuple);
@@ -183,9 +318,12 @@ export class AmapMapAdapter implements MapAdapter {
 
   fitRoute(geometry: OutputCoordinate[]) {
     if (!this.map || geometry.length < 2) return;
-    const overlays = [this.routePolyline, this.startMarker, this.endMarker].filter(
-      (overlay): overlay is AmapPolyline | AmapMarker => overlay !== null,
-    );
+    const overlays = [
+      this.routePolyline,
+      this.startMarker,
+      this.endMarker,
+      this.handoffMarker,
+    ].filter((overlay): overlay is AmapPolyline | AmapMarker => overlay !== null);
     this.map.setFitView(overlays, false, [110, 80, 150, 80], 16);
   }
 
@@ -364,16 +502,71 @@ export class AmapMapAdapter implements MapAdapter {
     this.openInfoWindow(content, lngLatTuple(camera), 'camera', [0, -10]);
   }
 
+  private handleHandoffClick(event: unknown) {
+    this.suppressMapClickUntil = Date.now() + 250;
+    const originEvent = isRecord(event) && isRecord(event.originEvent) ? event.originEvent : null;
+    if (originEvent && typeof originEvent.stopPropagation === 'function') {
+      originEvent.stopPropagation.call(originEvent);
+    }
+    if (!this.handoffData || !this.handoffDescription) return;
+    const content = createNavigationHandoffPopup(
+      this.handoffData,
+      this.handoffDescription,
+      buildAmapNavigationUri(this.handoffData),
+      () => {
+        this.callbacks?.onHandoffSegmentSelect();
+        this.closeInfoWindow();
+      },
+    );
+    this.openInfoWindow(
+      content,
+      lngLatTuple(this.handoffData.navigationHandoff.gcj02),
+      'handoff',
+      [0, -12],
+    );
+  }
+
+  private resolveNavigationHandoffDescription(data: HandoffMarkerData): Promise<string> {
+    if (!this.amap) return Promise.reject(new Error('地图尚未加载'));
+    const geocoder = new this.amap.Geocoder({
+      extensions: 'all',
+      radius: HANDOFF_LANDMARK_RADIUS_METERS,
+    });
+    return new Promise((resolve, reject) => {
+      geocoder.getAddress(lngLatTuple(data.navigationHandoff.gcj02), (status, result) => {
+        if (status !== 'complete' || !isRecord(result) || !isRecord(result.regeocode)) {
+          reject(new Error('交接点附近地标解析失败'));
+          return;
+        }
+        const regeocode = result.regeocode;
+        let placeName = '';
+        if (Array.isArray(regeocode.pois)) {
+          const poi = selectHandoffPoi(regeocode.pois, HANDOFF_LANDMARK_RADIUS_METERS);
+          if (poi) placeName = describeHandoffPoi(regeocode, poi);
+        }
+        if (!placeName && typeof regeocode.formattedAddress === 'string') {
+          placeName = regeocode.formattedAddress;
+        }
+        if (!placeName) {
+          reject(new Error('交接点附近没有可搜索描述'));
+          return;
+        }
+        resolve(`${placeName}附近`);
+      });
+    });
+  }
+
   private openInfoWindow(
     content: HTMLElement,
     position: [number, number],
-    kind: 'camera' | 'map-point',
+    kind: 'camera' | 'map-point' | 'handoff',
     offset: [number, number],
   ) {
     if (!this.amap || !this.map) return;
     this.infoWindow?.close();
     this.infoWindow = new this.amap.InfoWindow({ content, offset });
     this.infoWindowKind = kind;
+    this.container?.classList.add('map-container--popup-open');
     this.infoWindow.open(this.map, position);
   }
 
@@ -381,5 +574,6 @@ export class AmapMapAdapter implements MapAdapter {
     this.infoWindow?.close();
     this.infoWindow = null;
     this.infoWindowKind = null;
+    this.container?.classList.remove('map-container--popup-open');
   }
 }

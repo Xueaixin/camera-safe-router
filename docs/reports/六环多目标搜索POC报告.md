@@ -1,7 +1,9 @@
 # 六环多目标搜索 POC 报告
 
-状态：生产拓扑、合规距离单点验证与四方向真实自动回归通过，路线形状待人工审批
+状态：历史 POC 基线；2026-08-05 单调跨界约束改造后的真实数据复测待执行
 验证日期：2026-08-04
+
+> 目录迁移说明（2026-08-06）：可重新生成的 POC 产物已从运行数据根迁移到仓库同级 `workspace/work`；下文路径已更新为迁移后的实际位置，验证统计仍对应 2026-08-04 的原始运行。
 
 ## 1. 结论
 
@@ -75,7 +77,7 @@ GraphHopper 11 的 `DijkstraOneToMany` 不适用：node-based 模式拒绝带 tu
 
 - 当前固定场景不能据此冻结全市性能预算或导航质量。
 - 20 个高复杂度位置已抽查 16 个初步通过、4 个保留，特殊拓扑候选和路线形状仍待发布前人工审批。
-- OpenAPI 1.1、生产路线服务和前端协议已经接入；前端当前继续绘制完整 `geometry`。人工路线形状、特殊拓扑和保留位置门槛仍在发布前执行。
+- 当前实现已升级到 OpenAPI 1.3，并增加搜索期单调边界约束、拓扑连续参考路线、方向相关的道路安全导航交接点和前端完整/环内视图；2026-08-06 正式规划器 14 条真实路线已复测通过，其中武清至朱辛庄入环路线要求在驶离六环高速后生成安全段交接点。人工路线形状、特殊拓扑和保留位置门槛仍在发布前执行。
 
 ## 9. 复现
 
@@ -84,4 +86,4 @@ GraphHopper 11 的 `DijkstraOneToMany` 不适用：node-based 模式拒绝带 tu
 - 正式规划器真实回归：`server/src/test/java/cn/camera/safe/routing/SixthRingRoutePlannerIntegrationTest.java`
 - 生产算法合成图测试：`server/src/test/java/cn/camera/safe/routing/EdgeKeyMultiTargetDijkstraTest.java`
 - 真实图测试：`server/src/test/java/cn/camera/safe/routing/SixthRingMultiTargetSearchPocTest.java`
-- 外部完整报告：`E:\camera-safe-routing-data\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-multitarget-search-report.md`
+- 外部完整报告：`F:\CodexProjects\routing-plan\workspace\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-multitarget-search-report.md`

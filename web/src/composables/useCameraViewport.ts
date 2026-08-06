@@ -1,4 +1,5 @@
 import type { ApiClient } from '@/services/apiClient';
+import { ApiClientError } from '@/services/errors';
 import { ProtocolError } from '@/services/protocol';
 import type { CameraView } from '@/types/api';
 import type { MapAdapter, MapViewport } from '@/types/map';
@@ -81,7 +82,9 @@ export function createCameraViewportController(
     } catch (error: unknown) {
       if (sequence !== requestSequence || controller.signal.aborted) return;
       callbacks.onError(
-        error instanceof ProtocolError ? error.message : '摄像头点位加载失败，请稍后重试。',
+        error instanceof ProtocolError || error instanceof ApiClientError
+          ? error.message
+          : '摄像头点位加载失败，请稍后重试。',
       );
     } finally {
       if (sequence === requestSequence) callbacks.onLoading(false);

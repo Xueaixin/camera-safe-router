@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildMockRoute, mockApiError } from '@/mocks/fixtures';
+import { buildMockCrossBoundaryRoute, buildMockRoute, mockApiError } from '@/mocks/fixtures';
 import type { ApiClient } from '@/services/apiClient';
 import { ApiClientError } from '@/services/errors';
 import { useRouteStore } from '@/stores/routeStore';
@@ -166,5 +166,27 @@ describe('route store', () => {
     await firstPlan;
 
     expect(store.route?.routeId).toBe('new-route');
+  });
+
+  it('switches a cross-boundary route between the full trip and safe segment', async () => {
+    const store = useRouteStore();
+    store.setStart(place('环内起点', 116.397, 39.908));
+    store.setEnd(place('环外终点', 117.21, 39.136));
+    await store.plan(clientWith(async (request) => buildMockCrossBoundaryRoute(request)));
+
+    expect(store.routeView).toBe('full');
+    expect(store.displayGeometry).toHaveLength(5);
+    expect(store.displayDistanceMeters).toBe(115800);
+
+    store.showSafeSegment();
+    expect(store.routeView).toBe('safe-segment');
+    expect(store.displayGeometry).toHaveLength(4);
+    expect(store.displayDistanceMeters).toBe(29200);
+
+    store.showFullRoute();
+    expect(store.routeView).toBe('full');
+    store.setEnd(place('新终点', 116.47, 39.992));
+    expect(store.routeView).toBe('full');
+    expect(store.route).toBeNull();
   });
 });

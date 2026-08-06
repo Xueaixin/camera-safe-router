@@ -13,6 +13,15 @@ async function planInitialRoute(page: Page) {
   await expect(page.getByText('路线已通过安全校验')).toBeVisible();
 }
 
+async function planCrossBoundaryRoute(page: Page) {
+  await page.getByRole('combobox', { name: '搜索起点' }).fill('天安');
+  await page.getByRole('option', { name: /天安门广场/ }).click();
+  await page.getByRole('combobox', { name: '搜索终点' }).fill('天津');
+  await page.getByRole('option', { name: /天津站/ }).click();
+  await page.getByTestId('plan-route').click();
+  await expect(page.getByText('路线已通过安全校验')).toBeVisible();
+}
+
 async function enableLocation(page: Page, context: BrowserContext) {
   await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
   await context.setGeolocation({ longitude: 116.39, latitude: 39.9, accuracy: 18.2 });
@@ -28,6 +37,44 @@ test('first route planning succeeds with frozen mock data', async ({ page }) => 
   await planInitialRoute(page);
   await expect(page.getByTestId('route-summary')).toContainText('28 分钟');
   await expect(page.getByTestId('map-container')).toHaveAttribute('data-route-points', '4');
+});
+
+test('cross-boundary route keeps the handoff marker and switches to the inner segment', async ({
+  page,
+}) => {
+  await page.goto('/?mockScenario=cross-boundary&mockDelay=0');
+  await planCrossBoundaryRoute(page);
+
+  const map = page.getByTestId('map-container');
+  await expect(map).toHaveAttribute('data-handoff-marker', 'outbound');
+  await expect(map).toHaveAttribute('data-route-points', '5');
+  await expect(page.getByTestId('route-summary')).toContainText('116 公里');
+
+  await page.getByTestId('show-safe-route').click();
+  await expect(map).toHaveAttribute('data-route-points', '4');
+  await expect(page.getByTestId('route-summary')).toContainText('29 公里');
+  await expect(map).toHaveAttribute('data-handoff-marker', 'outbound');
+
+  await page.getByTestId('show-full-route').click();
+  const canvas = page.locator('.mock-map__canvas');
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  await canvas.click({
+    position: {
+      x: (box?.width ?? 1) * ((116.46 - 116.25) / (116.55 - 116.25)),
+      y: (box?.height ?? 1) * ((40.04 - 39.935) / (40.04 - 39.82)),
+    },
+  });
+  const popup = page.getByTestId('handoff-popup');
+  await expect(popup).toContainText('交接道路：立汤路辅路');
+  await expect(popup).toContainText('附近地标：北京市昌平区小汤山镇阿苏卫收费站附近');
+  const navigationLink = page.getByTestId('open-amap-navigation');
+  await expect(navigationLink).toHaveAttribute('href', /uri\.amap\.com\/navigation/);
+  await expect(page.getByTestId('copy-handoff-landmark')).toBeEnabled();
+  await page.getByTestId('copy-handoff-landmark').click();
+  await expect(popup).toContainText('地标描述已复制');
+  await page.getByTestId('show-safe-segment').click();
+  await expect(map).toHaveAttribute('data-route-points', '4');
 });
 
 test('no compliant route is explicit and no route is drawn', async ({ page }) => {

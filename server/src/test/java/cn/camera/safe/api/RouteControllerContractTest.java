@@ -3,6 +3,8 @@ package cn.camera.safe.api;
 import cn.camera.safe.api.model.BoundaryCrossing;
 import cn.camera.safe.api.model.BoundaryDirection;
 import cn.camera.safe.api.model.BoundaryRole;
+import cn.camera.safe.api.model.ExternalHandoff;
+import cn.camera.safe.api.model.NavigationHandoff;
 import cn.camera.safe.api.model.OutputCoordinate;
 import cn.camera.safe.api.model.RoutePlanningMode;
 import cn.camera.safe.api.model.RouteResponse;
@@ -69,6 +71,16 @@ class RouteControllerContractTest {
                         BoundaryRole.OUTER_EXIT,
                         new OutputCoordinate(116.399, 39.904),
                         new OutputCoordinate(116.405, 39.905)),
+                new NavigationHandoff(
+                        new OutputCoordinate(116.394, 39.904),
+                        new OutputCoordinate(116.40, 39.905),
+                        320,
+                        "沙河路"),
+                new ExternalHandoff(
+                        new OutputCoordinate(116.42, 39.92),
+                        new OutputCoordinate(116.426, 39.921),
+                        500,
+                        200),
                 new RouteSegment(400.5, 45, safeGeometry),
                 new RouteSegment(600, 75, referenceGeometry),
                 1_000.5,
@@ -90,6 +102,8 @@ class RouteControllerContractTest {
                 .andExpect(jsonPath("$.boundaryCrossing.portalId").value("P0001"))
                 .andExpect(jsonPath("$.boundaryCrossing.wgs84.lng").value(116.399))
                 .andExpect(jsonPath("$.boundaryCrossing.gcj02.lng").value(116.405))
+                .andExpect(jsonPath("$.navigationHandoff.roadName").value("沙河路"))
+                .andExpect(jsonPath("$.externalHandoff.poiSearchRadiusMeters").value(200))
                 .andExpect(jsonPath("$.safeSegment.geometry.length()").value(2))
                 .andExpect(jsonPath("$.referenceSegment.geometry.length()").value(2))
                 .andExpect(jsonPath("$.cameraConflictCount").value(0))
@@ -111,6 +125,8 @@ class RouteControllerContractTest {
                 "sixth-ring-v1",
                 null,
                 null,
+                null,
+                null,
                 new RouteSegment(1_000.5, 120, geometry),
                 null,
                 1_000.5,
@@ -127,6 +143,8 @@ class RouteControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.boundaryDirection").value(nullValue()))
                 .andExpect(jsonPath("$.boundaryCrossing").value(nullValue()))
+                .andExpect(jsonPath("$.navigationHandoff").value(nullValue()))
+                .andExpect(jsonPath("$.externalHandoff").value(nullValue()))
                 .andExpect(jsonPath("$.referenceSegment").value(nullValue()));
     }
 

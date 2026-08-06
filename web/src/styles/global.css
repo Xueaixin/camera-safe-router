@@ -154,6 +154,10 @@ a:focus-visible {
   z-index: 0;
 }
 
+.map-container.map-container--popup-open {
+  z-index: 13;
+}
+
 .map-state {
   position: absolute;
   inset: 0;
@@ -555,6 +559,36 @@ a:focus-visible {
   color: var(--color-location);
 }
 
+.route-view-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin-top: 10px;
+  padding: 2px;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+}
+
+.route-view-switch button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 8px;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.route-view-switch button.is-active {
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: 0 1px 3px rgba(24, 33, 47, 0.14);
+}
+
 .route-empty {
   display: flex;
   min-height: 32px;
@@ -750,13 +784,20 @@ a:focus-visible {
   transform: rotate(-45deg);
 }
 
-.map-marker--start::first-letter,
-.map-marker--end::first-letter {
+.map-marker > span {
   transform: rotate(45deg);
 }
 
 .map-marker--end {
   background: #293444;
+}
+
+.map-marker--outbound {
+  background: #b45309;
+}
+
+.map-marker--inbound {
+  background: var(--color-location);
 }
 
 .map-marker--current {
@@ -776,6 +817,20 @@ a:focus-visible {
   max-width: 320px;
 }
 
+.handoff-popup {
+  min-width: 260px;
+  max-width: 320px;
+}
+
+.handoff-popup__location {
+  min-height: 34px;
+}
+
+.handoff-popup__feedback {
+  min-height: 18px;
+  color: var(--color-location) !important;
+}
+
 .map-point-popup__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -784,6 +839,9 @@ a:focus-visible {
 }
 
 .map-point-popup__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 36px;
   padding: 0 10px;
   background: var(--color-surface);
@@ -791,6 +849,28 @@ a:focus-visible {
   border-radius: 4px;
   cursor: pointer;
   font-weight: 650;
+  text-decoration: none;
+}
+
+.map-point-popup__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.map-point-popup__action--handoff {
+  color: var(--color-route);
+  border-color: #8db5eb;
+}
+
+.map-point-popup__action--copy {
+  grid-column: 1 / -1;
+  color: #7c5206;
+  border-color: #d8b56f;
+}
+
+.map-point-popup__action--navigation {
+  color: #0b705f;
+  border-color: #75b9aa;
 }
 
 .map-point-popup__action--start {

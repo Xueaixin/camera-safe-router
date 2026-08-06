@@ -1,4 +1,10 @@
-import { buildMockRoute, mockApiError, MOCK_CAMERA_PAGE, MOCK_SNAPSHOT } from './fixtures';
+import {
+  buildMockCrossBoundaryRoute,
+  buildMockRoute,
+  mockApiError,
+  MOCK_CAMERA_PAGE,
+  MOCK_SNAPSHOT,
+} from './fixtures';
 import type { ApiClient } from '@/services/apiClient';
 import { ApiClientError } from '@/services/errors';
 import {
@@ -28,6 +34,7 @@ export type MockScenario =
   | 'network-error'
   | 'protocol-conflict'
   | 'invalid-geometry'
+  | 'cross-boundary'
   | 'reroute-failure';
 
 export interface MockApiOptions {
@@ -48,6 +55,7 @@ function scenarioFromLocation(): MockScenario {
     'network-error',
     'protocol-conflict',
     'invalid-geometry',
+    'cross-boundary',
     'reroute-failure',
   ];
   return scenarios.includes(value as MockScenario) ? (value as MockScenario) : 'success';
@@ -106,7 +114,11 @@ export class MockApiClient implements ApiClient {
       throwBusiness(503, 'CAMERA_SNAPSHOT_NOT_READY');
     }
 
-    const response = buildMockRoute(request, `route-fixture-${++this.routeSequence}`);
+    const routeId = `route-fixture-${++this.routeSequence}`;
+    const response =
+      this.scenario === 'cross-boundary'
+        ? buildMockCrossBoundaryRoute(request, routeId)
+        : buildMockRoute(request, routeId);
     if (this.scenario === 'protocol-conflict') {
       return parseRouteResponse({ ...response, cameraConflictCount: 1 });
     }

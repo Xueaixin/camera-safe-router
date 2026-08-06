@@ -31,7 +31,7 @@ class RuntimePathConfigurationTest {
         assertThat(environment.getRequiredProperty("app.cameras.update.download-path"))
                 .isEqualTo("/camera-safe-routing-data/downloads/cameras");
         assertThat(environment.getRequiredProperty("app.cameras.update.failed-path"))
-                .isEqualTo("/camera-safe-routing-data/work/cameras/failed");
+                .isEqualTo("/camera-safe-routing-data/failed/cameras");
         assertThat(environment.getRequiredProperty("app.cameras.update.backup-path"))
                 .isEqualTo("/camera-safe-routing-data/backups/cameras");
         assertThat(environment.getRequiredProperty("logging.file.name"))
@@ -66,7 +66,7 @@ class RuntimePathConfigurationTest {
         assertThat(environment.getRequiredProperty("app.cameras.update.download-path"))
                 .isEqualTo("R:/routing-data/downloads/cameras");
         assertThat(environment.getRequiredProperty("app.cameras.update.failed-path"))
-                .isEqualTo("R:/routing-data/work/cameras/failed");
+                .isEqualTo("R:/routing-data/failed/cameras");
         assertThat(environment.getRequiredProperty("app.cameras.update.backup-path"))
                 .isEqualTo("R:/routing-data/backups/cameras");
         assertThat(environment.getRequiredProperty("logging.file.name"))

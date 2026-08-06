@@ -41,6 +41,28 @@ final class EdgeKeyMultiTargetDijkstra {
             double toleranceMeters,
             int maxVisitedStates,
             Duration timeout) {
+        return search(
+                graph,
+                weighting,
+                sourceNode,
+                portals,
+                direction,
+                EdgeTraversalConstraint.ALLOW_ALL,
+                toleranceMeters,
+                maxVisitedStates,
+                timeout);
+    }
+
+    static SearchResult search(
+            Graph graph,
+            Weighting weighting,
+            int sourceNode,
+            Collection<Portal> portals,
+            SearchDirection direction,
+            EdgeTraversalConstraint traversalConstraint,
+            double toleranceMeters,
+            int maxVisitedStates,
+            Duration timeout) {
         if (sourceNode < 0 || sourceNode >= graph.getNodes()) {
             throw new IllegalArgumentException("source node is outside graph");
         }
@@ -69,7 +91,8 @@ final class EdgeKeyMultiTargetDijkstra {
 
         relaxFromNode(
                 weighting, explorer, sourceNode, NO_EDGE, -1, 0,
-                portalsByOriginalEdgeKey, direction, queue, bestStates, bestPortals, cursor);
+                portalsByOriginalEdgeKey, direction, traversalConstraint,
+                queue, bestStates, bestPortals, cursor);
 
         int visitedStates = 0;
         Completion completion = Completion.EXHAUSTED;
@@ -100,7 +123,7 @@ final class EdgeKeyMultiTargetDijkstra {
             visitedStates++;
             relaxFromNode(
                     weighting, explorer, next.node(), next.edgeId(), next.edgeKey(), next.weight(),
-                    portalsByOriginalEdgeKey, direction,
+                    portalsByOriginalEdgeKey, direction, traversalConstraint,
                     queue, bestStates, bestPortals, cursor);
         }
 
@@ -128,6 +151,7 @@ final class EdgeKeyMultiTargetDijkstra {
             double settledWeight,
             Map<Integer, List<Portal>> portalsByOriginalEdgeKey,
             SearchDirection direction,
+            EdgeTraversalConstraint traversalConstraint,
             PriorityQueue<QueueState> queue,
             Map<Integer, SettledState> bestStates,
             Map<String, PortalPath> bestPortals,
@@ -155,6 +179,9 @@ final class EdgeKeyMultiTargetDijkstra {
                         continue;
                     }
                     double searchFraction = projection.fractionFromTraversalBase();
+                    if (!traversalConstraint.allows(edge, searchFraction)) {
+                        continue;
+                    }
                     double directedFraction = reverse ? 1 - searchFraction : searchFraction;
                     double portalDistance = beforeEdge + edgeWeight * searchFraction;
                     PortalPath existing = bestPortals.get(portal.id());
@@ -178,6 +205,9 @@ final class EdgeKeyMultiTargetDijkstra {
                 }
             }
 
+            if (!traversalConstraint.allows(edge)) {
+                continue;
+            }
             double nextWeight = beforeEdge + edgeWeight;
             SettledState existing = bestStates.get(directedEdgeKey);
             if (existing == null || nextWeight < existing.weight()) {

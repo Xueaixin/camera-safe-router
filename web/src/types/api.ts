@@ -21,10 +21,7 @@ export interface RouteStep {
 }
 
 export type RoutePlanningMode =
-  | 'INTERNAL_SAFE'
-  | 'CROSS_BOUNDARY_OUTBOUND'
-  | 'CROSS_BOUNDARY_INBOUND'
-  | 'EXTERNAL_ONLY';
+  'INTERNAL_SAFE' | 'CROSS_BOUNDARY_OUTBOUND' | 'CROSS_BOUNDARY_INBOUND' | 'EXTERNAL_ONLY';
 
 export type BoundaryDirection = 'OUTBOUND' | 'INBOUND';
 export type BoundaryRole = 'OUTER_EXIT' | 'INNER_ENTRY';
@@ -36,6 +33,20 @@ export interface BoundaryCrossing {
   boundaryRole: BoundaryRole;
   wgs84: OutputCoordinate;
   gcj02: OutputCoordinate;
+}
+
+export interface ExternalHandoff {
+  wgs84: OutputCoordinate;
+  gcj02: OutputCoordinate;
+  boundaryClearanceMeters: number;
+  poiSearchRadiusMeters: number;
+}
+
+export interface NavigationHandoff {
+  wgs84: OutputCoordinate;
+  gcj02: OutputCoordinate;
+  boundaryClearanceMeters: number;
+  roadName?: string | null;
 }
 
 export interface RouteSegment {
@@ -51,6 +62,8 @@ export interface RouteResponse {
   boundaryVersion: string;
   boundaryDirection: BoundaryDirection | null;
   boundaryCrossing: BoundaryCrossing | null;
+  navigationHandoff: NavigationHandoff | null;
+  externalHandoff: ExternalHandoff | null;
   safeSegment: RouteSegment | null;
   referenceSegment: RouteSegment | null;
   distanceMeters: number;

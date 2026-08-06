@@ -10,8 +10,10 @@ public record PlannedRoute(
         String boundaryVersion,
         SixthRingPortal.Direction boundaryDirection,
         SixthRingPortal boundaryCrossing,
+        NavigationHandoffPoint navigationHandoff,
         RouteLeg safeSegment,
         RouteLeg referenceSegment,
+        ExternalHandoffPoint externalHandoff,
         double distanceMeters,
         long durationMillis,
         List<Wgs84Coordinate> geometry,
@@ -31,31 +33,42 @@ public record PlannedRoute(
         if (geometry.size() < 2) {
             throw new IllegalArgumentException("planned route geometry requires at least two points");
         }
-        validateMode(planningMode, boundaryDirection, boundaryCrossing, safeSegment, referenceSegment);
+        validateMode(
+                planningMode,
+                boundaryDirection,
+                boundaryCrossing,
+                navigationHandoff,
+                safeSegment,
+                referenceSegment,
+                externalHandoff);
     }
 
     private static void validateMode(
             RoutePlanningMode mode,
             SixthRingPortal.Direction direction,
             SixthRingPortal crossing,
+            NavigationHandoffPoint navigationHandoff,
             RouteLeg safe,
-            RouteLeg reference) {
+            RouteLeg reference,
+            ExternalHandoffPoint externalHandoff) {
         switch (mode) {
             case INTERNAL_SAFE -> {
-                if (direction != null || crossing != null || safe == null || reference != null) {
+                if (direction != null || crossing != null || navigationHandoff != null || safe == null
+                        || reference != null || externalHandoff != null) {
                     throw new IllegalArgumentException("invalid INTERNAL_SAFE route shape");
                 }
             }
             case CROSS_BOUNDARY_OUTBOUND -> validateCrossBoundary(
                     SixthRingPortal.Direction.OUTBOUND,
                     SixthRingPortal.BoundaryRole.OUTER_EXIT,
-                    direction, crossing, safe, reference);
+                    direction, crossing, navigationHandoff, safe, reference, externalHandoff);
             case CROSS_BOUNDARY_INBOUND -> validateCrossBoundary(
                     SixthRingPortal.Direction.INBOUND,
                     SixthRingPortal.BoundaryRole.INNER_ENTRY,
-                    direction, crossing, safe, reference);
+                    direction, crossing, navigationHandoff, safe, reference, externalHandoff);
             case EXTERNAL_ONLY -> {
-                if (direction != null || crossing != null || safe != null || reference == null) {
+                if (direction != null || crossing != null || navigationHandoff != null || safe != null
+                        || reference == null || externalHandoff != null) {
                     throw new IllegalArgumentException("invalid EXTERNAL_ONLY route shape");
                 }
             }
@@ -67,13 +80,28 @@ public record PlannedRoute(
             SixthRingPortal.BoundaryRole expectedRole,
             SixthRingPortal.Direction direction,
             SixthRingPortal crossing,
+            NavigationHandoffPoint navigationHandoff,
             RouteLeg safe,
-            RouteLeg reference) {
+            RouteLeg reference,
+            ExternalHandoffPoint externalHandoff) {
         if (direction != expectedDirection || crossing == null
                 || crossing.direction() != expectedDirection
                 || crossing.boundaryRole() != expectedRole
-                || safe == null || reference == null) {
+                || safe == null || reference == null || externalHandoff == null) {
             throw new IllegalArgumentException("invalid cross-boundary route shape");
+        }
+        if (navigationHandoff != null) {
+            Wgs84Coordinate safeJoin = expectedDirection == SixthRingPortal.Direction.OUTBOUND
+                    ? safe.geometry().getLast()
+                    : safe.geometry().getFirst();
+            Wgs84Coordinate referenceJoin = expectedDirection == SixthRingPortal.Direction.OUTBOUND
+                    ? reference.geometry().getFirst()
+                    : reference.geometry().getLast();
+            if (!navigationHandoff.coordinate().equals(safeJoin)
+                    || !navigationHandoff.coordinate().equals(referenceJoin)) {
+                throw new IllegalArgumentException(
+                        "navigation handoff must equal the safe/reference segment join");
+            }
         }
     }
 }

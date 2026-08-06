@@ -5,7 +5,9 @@ import cn.camera.safe.api.ErrorCode;
 import cn.camera.safe.api.model.BoundaryCrossing;
 import cn.camera.safe.api.model.BoundaryDirection;
 import cn.camera.safe.api.model.BoundaryRole;
+import cn.camera.safe.api.model.ExternalHandoff;
 import cn.camera.safe.api.model.InputCoordinate;
+import cn.camera.safe.api.model.NavigationHandoff;
 import cn.camera.safe.api.model.OutputCoordinate;
 import cn.camera.safe.api.model.RouteRequest;
 import cn.camera.safe.api.model.RouteResponse;
@@ -16,6 +18,8 @@ import cn.camera.safe.coordinate.CoordinateConverter;
 import cn.camera.safe.coordinate.Gcj02Coordinate;
 import cn.camera.safe.coordinate.Wgs84Coordinate;
 import cn.camera.safe.routing.GraphHopperManager;
+import cn.camera.safe.routing.ExternalHandoffPoint;
+import cn.camera.safe.routing.NavigationHandoffPoint;
 import cn.camera.safe.routing.PlannedRoute;
 import cn.camera.safe.routing.RouteLeg;
 import cn.camera.safe.routing.RoutePlanner;
@@ -129,6 +133,8 @@ public final class RoutePlanningService {
                 plannedRoute.boundaryDirection() == null
                         ? null : BoundaryDirection.valueOf(plannedRoute.boundaryDirection().name()),
                 boundaryCrossing(plannedRoute.boundaryCrossing()),
+                navigationHandoff(plannedRoute.navigationHandoff()),
+                externalHandoff(plannedRoute.externalHandoff()),
                 segment(plannedRoute.safeSegment()),
                 segment(plannedRoute.referenceSegment()),
                 plannedRoute.distanceMeters(),
@@ -231,6 +237,30 @@ public final class RoutePlanningService {
                 leg.distanceMeters(),
                 Math.max(0, leg.durationMillis() / 1_000),
                 outputGeometry(leg.geometry()));
+    }
+
+    private ExternalHandoff externalHandoff(ExternalHandoffPoint handoff) {
+        if (handoff == null) {
+            return null;
+        }
+        var gcj02 = coordinateConverter.toGcj02(handoff.coordinate());
+        return new ExternalHandoff(
+                new OutputCoordinate(handoff.coordinate().lng(), handoff.coordinate().lat()),
+                new OutputCoordinate(gcj02.lng(), gcj02.lat()),
+                handoff.boundaryClearanceMeters(),
+                handoff.poiSearchRadiusMeters());
+    }
+
+    private NavigationHandoff navigationHandoff(NavigationHandoffPoint handoff) {
+        if (handoff == null) {
+            return null;
+        }
+        var gcj02 = coordinateConverter.toGcj02(handoff.coordinate());
+        return new NavigationHandoff(
+                new OutputCoordinate(handoff.coordinate().lng(), handoff.coordinate().lat()),
+                new OutputCoordinate(gcj02.lng(), gcj02.lat()),
+                handoff.boundaryClearanceMeters(),
+                handoff.roadName());
     }
 
     private List<OutputCoordinate> outputGeometry(List<Wgs84Coordinate> geometry) {

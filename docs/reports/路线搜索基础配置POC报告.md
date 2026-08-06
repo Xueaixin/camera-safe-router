@@ -3,6 +3,8 @@
 状态：合规距离配置、独立缓存和真实路线回归通过，已升为默认
 验证日期：2026-08-04
 
+> 目录迁移说明（2026-08-06）：可重新生成的 POC 产物已从运行数据根迁移到仓库同级 `workspace/work`；下文路径已更新为迁移后的实际位置，验证统计仍对应 2026-08-04 的原始运行。
+
 ## 1. 结论
 
 默认 `COMPLIANT_DISTANCE_V1` 已满足六环算法的 GraphHopper 基础门槛：启用机动车 turn costs，导入 OSM 转向限制，显式处理 `road_access`，并使用距离主导权重。动态摄像头禁边仍由 `BlockedEdgeWeighting` 包装，成功路线继续执行 edge key 检查和 JTS 零冲突终检。
@@ -51,13 +53,13 @@
 
 ## 5. 后续状态
 
-GraphHopper 基础配置已不再阻断生产算法。有向通行口拓扑、东南西北真实回归、OpenAPI 1.1 和正式路线服务迁移均已完成；当前剩余发布门槛是路线形状、特殊拓扑和 4 个保留位置的人工审批，详见 [六环东南西北真实路线回归报告](六环东南西北真实路线回归报告.md)。
+GraphHopper 基础配置已不再阻断生产算法。有向通行口拓扑和正式路线服务迁移均已完成；当前实现包含单调跨界约束、拓扑连续参考路线与 OpenAPI 1.3。2026-08-06 正式规划器 14 条真实路线已重跑通过，并覆盖入环高速驶离后的安全段导航交接点；当前发布门槛是地图路线形状、特殊拓扑和 4 个保留位置的人工审批，详见 [六环东南西北真实路线回归报告](六环东南西北真实路线回归报告.md)。
 
 ## 6. 复现
 
 - 配置与真实图报告：`server/src/test/java/cn/camera/safe/routing/RoutingFoundationPocTest.java`
 - 最小 OSM 合法性测试：`server/src/test/java/cn/camera/safe/routing/CompliantRoutingProfileIntegrationTest.java`
 - 配置与缓存契约：`server/src/test/java/cn/camera/safe/routing/RoutingGraphConfigurationTest.java`
-- 外部完整报告：`E:\camera-safe-routing-data\work\sixth-ring-poc\20260804-compliant-distance-v1\routing-foundation-poc-report.md`
+- 外部完整报告：`F:\CodexProjects\routing-plan\workspace\work\sixth-ring-poc\20260804-compliant-distance-v1\routing-foundation-poc-report.md`
 
 普通 `mvn test` 执行最小图和配置测试；真实图报告只有显式传入 PBF、候选缓存和输出路径时才运行。

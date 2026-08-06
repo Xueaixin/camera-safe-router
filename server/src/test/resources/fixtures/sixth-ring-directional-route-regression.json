@@ -82,6 +82,32 @@
       "minDistanceMeters": 20000,
       "maxDistanceMeters": 130000,
       "reviewExpectation": "北向入环，尽可能晚进入内侧边界"
+    },
+    {
+      "id": "north-stacked-bridge-outbound",
+      "quadrant": "NORTH",
+      "direction": "OUTBOUND",
+      "start": {"lng": 116.30328606291512, "lat": 40.097249927365986},
+      "end": {"lng": 117.072047516124, "lat": 39.31270167958216},
+      "minDistanceMeters": 100000,
+      "maxDistanceMeters": 230000,
+      "maxReferenceJoinStepMeters": 150,
+      "requiresNavigationHandoff": true,
+      "navigationHandoffSegment": "REFERENCE",
+      "reviewExpectation": "朱辛庄至武清；普通跨线桥通行口不得按同坐标跳到桥下六环高速"
+    },
+    {
+      "id": "north-stacked-bridge-inbound",
+      "quadrant": "NORTH",
+      "direction": "INBOUND",
+      "start": {"lng": 117.072047516124, "lat": 39.31270167958216},
+      "end": {"lng": 116.30328606291512, "lat": 40.097249927365986},
+      "minDistanceMeters": 100000,
+      "maxDistanceMeters": 230000,
+      "maxReferenceJoinStepMeters": 150,
+      "requiresNavigationHandoff": true,
+      "navigationHandoffSegment": "SAFE",
+      "reviewExpectation": "武清至朱辛庄；沿六环高速入环后必须在驶入普通道路的位置生成导航交接点"
     }
   ],
   "internalRoutes": [

@@ -45,7 +45,7 @@ app:
       cron: ${CAMERA_UPDATE_CRON:0 15 3 * * *}
       zone: ${CAMERA_UPDATE_ZONE:Asia/Shanghai}
       download-path: ${CAMERA_UPDATE_DOWNLOAD_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/downloads/cameras}
-      failed-path: ${CAMERA_UPDATE_FAILED_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/work/cameras/failed}
+      failed-path: ${CAMERA_UPDATE_FAILED_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/failed/cameras}
       backup-path: ${CAMERA_UPDATE_BACKUP_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/backups/cameras}
       connect-timeout: ${CAMERA_UPDATE_CONNECT_TIMEOUT:10s}
       request-timeout: ${CAMERA_UPDATE_REQUEST_TIMEOUT:30s}

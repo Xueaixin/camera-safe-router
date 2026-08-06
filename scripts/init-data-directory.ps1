@@ -25,7 +25,7 @@ $directories = @(
     (Join-Path $resolvedDataRoot 'graph-cache\jingjinji-compliant-distance-v1'),
     (Join-Path $resolvedDataRoot 'snapshots'),
     (Join-Path $resolvedDataRoot 'downloads\cameras'),
-    (Join-Path $resolvedDataRoot 'work\cameras\failed'),
+    (Join-Path $resolvedDataRoot 'failed\cameras'),
     (Join-Path $resolvedDataRoot 'backups\cameras'),
     (Join-Path $resolvedDataRoot 'logs\archive')
 )
@@ -40,6 +40,7 @@ foreach ($directory in $directories) {
     SixthRingBoundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary.geojson'
     CameraJson = Join-Path $resolvedDataRoot 'cameras\camera.json'
     CameraBackups = Join-Path $resolvedDataRoot 'backups\cameras'
+    CameraFailures = Join-Path $resolvedDataRoot 'failed\cameras'
     GraphCache = Join-Path $resolvedDataRoot 'graph-cache\jingjinji-compliant-distance-v1'
     Snapshots = Join-Path $resolvedDataRoot 'snapshots'
     LogFile = Join-Path $resolvedDataRoot 'logs\camera-safe-routing-server.log'

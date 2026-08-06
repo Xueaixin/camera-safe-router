@@ -28,6 +28,8 @@ export interface AmapOverlay {
 }
 
 export interface AmapMarker extends AmapOverlay {
+  on(event: string, handler: (event: unknown) => void): void;
+  off(event: string, handler: (event: unknown) => void): void;
   setPosition(position: [number, number]): void;
 }
 

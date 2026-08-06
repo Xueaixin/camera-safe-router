@@ -12,10 +12,21 @@ public final class HardAvoidingGraphHopper extends GraphHopper {
     private final ThreadLocal<RouteContext> routeContext = new ThreadLocal<>();
 
     public GHResponse route(GHRequest request, BlockedEdgeSnapshot snapshot, SearchAudit audit) {
+        return route(request, snapshot, audit, EdgeTraversalConstraint.ALLOW_ALL);
+    }
+
+    public GHResponse route(
+            GHRequest request,
+            BlockedEdgeSnapshot snapshot,
+            SearchAudit audit,
+            EdgeTraversalConstraint traversalConstraint) {
         if (routeContext.get() != null) {
             throw new IllegalStateException("不支持嵌套路线调用");
         }
-        routeContext.set(new RouteContext(Objects.requireNonNull(snapshot), Objects.requireNonNull(audit)));
+        routeContext.set(new RouteContext(
+                Objects.requireNonNull(snapshot),
+                Objects.requireNonNull(audit),
+                Objects.requireNonNull(traversalConstraint)));
         try {
             return super.route(request);
         } finally {
@@ -30,13 +41,23 @@ public final class HardAvoidingGraphHopper extends GraphHopper {
         if (context == null) {
             return delegate;
         }
-        return (profile, hints, disableTurnCosts) -> new BlockedEdgeWeighting(
-                delegate.createWeighting(profile, hints, disableTurnCosts),
-                context.snapshot(),
-                context.audit(),
-                getBaseGraph().getEdges());
+        return (profile, hints, disableTurnCosts) -> {
+            var baseWeighting = delegate.createWeighting(profile, hints, disableTurnCosts);
+            var constrainedWeighting = context.traversalConstraint() == EdgeTraversalConstraint.ALLOW_ALL
+                    ? baseWeighting
+                    : new TraversalConstrainedWeighting(
+                            baseWeighting, context.traversalConstraint());
+            return new BlockedEdgeWeighting(
+                    constrainedWeighting,
+                    context.snapshot(),
+                    context.audit(),
+                    getBaseGraph().getEdges());
+        };
     }
 
-    private record RouteContext(BlockedEdgeSnapshot snapshot, SearchAudit audit) {
+    private record RouteContext(
+            BlockedEdgeSnapshot snapshot,
+            SearchAudit audit,
+            EdgeTraversalConstraint traversalConstraint) {
     }
 }

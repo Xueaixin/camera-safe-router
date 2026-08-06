@@ -8,6 +8,7 @@ import RouteLayer from './RouteLayer.vue';
 import { resetAmapLoader } from '@/maps/amapLoader';
 import { createMapAdapter } from '@/maps/createMapAdapter';
 import type { ApiClient } from '@/services/apiClient';
+import { useRouteStore } from '@/stores/routeStore';
 import type { Coordinate } from '@/types/coordinate';
 import type { MapAdapter, MapEndpointTarget, MapSelection, PlaceSuggestion } from '@/types/map';
 
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 
 const container = ref<HTMLElement | null>(null);
 const map = shallowRef<MapAdapter | null>(null);
+const routeStore = useRouteStore();
 const loadState = ref<'loading' | 'ready' | 'error'>('loading');
 const loadError = ref('');
 
@@ -31,6 +33,7 @@ async function initialize() {
     const nextMap = await createMapAdapter();
     await nextMap.initialize(container.value, {
       onEndpointSelect: (selection, target) => emit('mapSelection', selection, target),
+      onHandoffSegmentSelect: () => routeStore.showSafeSegment(),
     });
     map.value = nextMap;
     loadState.value = 'ready';

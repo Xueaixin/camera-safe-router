@@ -43,6 +43,13 @@ watch(
 );
 
 watch(
+  () => routeStore.routeView,
+  (view) => {
+    if (view === 'safe-segment') showSteps.value = false;
+  },
+);
+
+watch(
   () => routeStore.state,
   (state) => {
     if (state !== 'idle' && state !== 'planning' && state !== 'success') expanded.value = true;
@@ -98,16 +105,41 @@ function retry() {
         <div class="route-metrics">
           <div>
             <Clock3 :size="17" aria-hidden="true" />
-            <span>{{ formatDuration(routeStore.route.durationSeconds) }}</span>
+            <span>{{ formatDuration(routeStore.displayDurationSeconds) }}</span>
           </div>
           <div>
             <MapPinned :size="17" aria-hidden="true" />
-            <span>{{ formatDistance(routeStore.route.distanceMeters) }}</span>
+            <span>{{ formatDistance(routeStore.displayDistanceMeters) }}</span>
           </div>
           <div class="route-metrics__safe">
             <ShieldCheck :size="17" aria-hidden="true" />
             <span>冲突 0</span>
           </div>
+        </div>
+        <div
+          v-if="routeStore.isCrossBoundary"
+          class="route-view-switch"
+          role="group"
+          aria-label="路线显示范围"
+        >
+          <button
+            type="button"
+            :class="{ 'is-active': routeStore.routeView === 'full' }"
+            :aria-pressed="routeStore.routeView === 'full'"
+            data-testid="show-full-route"
+            @click="routeStore.showFullRoute"
+          >
+            完整行程
+          </button>
+          <button
+            type="button"
+            :class="{ 'is-active': routeStore.routeView === 'safe-segment' }"
+            :aria-pressed="routeStore.routeView === 'safe-segment'"
+            data-testid="show-safe-route"
+            @click="routeStore.showSafeSegment"
+          >
+            环内行程
+          </button>
         </div>
       </template>
       <div v-else-if="routeStore.state === 'planning'" class="route-empty">
@@ -157,7 +189,7 @@ function retry() {
         </div>
 
         <button
-          v-if="routeStore.route.steps.length"
+          v-if="routeStore.routeView === 'full' && routeStore.route.steps.length"
           class="steps-toggle"
           type="button"
           :aria-expanded="showSteps"
@@ -167,7 +199,10 @@ function retry() {
           <ChevronDown v-if="showSteps" :size="17" aria-hidden="true" />
           <ChevronUp v-else :size="17" aria-hidden="true" />
         </button>
-        <RouteSteps v-if="showSteps" :steps="routeStore.route.steps" />
+        <RouteSteps
+          v-if="routeStore.routeView === 'full' && showSteps"
+          :steps="routeStore.route.steps"
+        />
       </div>
 
       <div v-if="locationStore.state === 'permission-denied'" class="feedback" role="status">

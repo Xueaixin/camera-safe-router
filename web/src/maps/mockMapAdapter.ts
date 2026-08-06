@@ -1,8 +1,19 @@
 import { MOCK_SEARCH_PLACES } from '@/mocks/fixtures';
-import { createCameraPopup, createMapPointPopup } from './mapPopupContent';
+import {
+  createCameraPopup,
+  createMapPointPopup,
+  createNavigationHandoffPopup,
+} from './mapPopupContent';
+import { buildAmapNavigationUri } from './amapUri';
 import type { CameraView, OutputCoordinate } from '@/types/api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from '@/types/coordinate';
-import type { MapAdapter, MapAdapterCallbacks, MapViewport, PlaceSuggestion } from '@/types/map';
+import type {
+  HandoffMarkerData,
+  MapAdapter,
+  MapAdapterCallbacks,
+  MapViewport,
+  PlaceSuggestion,
+} from '@/types/map';
 
 const MOCK_VIEWPORT: MapViewport = {
   minLng: 116.25,
@@ -21,10 +32,11 @@ export class MockMapAdapter implements MapAdapter {
   private cameras: CameraView[] = [];
   private start: SelectedPlace | null = null;
   private end: SelectedPlace | null = null;
+  private handoff: HandoffMarkerData | null = null;
   private location: DisplayLocation | null = null;
   private pendingSelection: { lng: number; lat: number } | null = null;
   private popup: HTMLElement | null = null;
-  private popupKind: 'camera' | 'map-point' | null = null;
+  private popupKind: 'camera' | 'map-point' | 'handoff' | null = null;
   private viewportListeners = new Set<() => void>();
   private readonly clickHandler = (event: MouseEvent) => this.handleClick(event);
 
@@ -89,6 +101,15 @@ export class MockMapAdapter implements MapAdapter {
     this.draw();
   }
 
+  setHandoffMarker(data: HandoffMarkerData | null) {
+    this.handoff = data;
+    if (this.container) {
+      this.container.dataset.handoffMarker = data?.crossing.direction.toLowerCase() ?? 'none';
+    }
+    if (!data && this.popupKind === 'handoff') this.closePopup();
+    this.draw();
+  }
+
   setRoute(geometry: OutputCoordinate[]) {
     this.route = geometry;
     if (this.container) this.container.dataset.routePoints = String(geometry.length);
@@ -145,6 +166,27 @@ export class MockMapAdapter implements MapAdapter {
     const bounds = this.canvas.getBoundingClientRect();
     const x = (event.clientX - bounds.left) / Math.max(bounds.width, 1);
     const y = (event.clientY - bounds.top) / Math.max(bounds.height, 1);
+    if (this.handoff) {
+      const [handoffX, handoffY] = this.project(
+        this.handoff.navigationHandoff.gcj02,
+        bounds.width,
+        bounds.height,
+      );
+      if (Math.hypot(handoffX - x * bounds.width, handoffY - y * bounds.height) <= 18) {
+        const description = Promise.resolve('北京市昌平区小汤山镇阿苏卫收费站附近');
+        const content = createNavigationHandoffPopup(
+          this.handoff,
+          description,
+          buildAmapNavigationUri(this.handoff),
+          () => {
+            this.callbacks?.onHandoffSegmentSelect();
+            this.closePopup();
+          },
+        );
+        this.openPopup(content, handoffX, handoffY, 'handoff');
+        return;
+      }
+    }
     const nearestCamera = this.cameras.find((camera) => {
       const [cameraX, cameraY] = this.project(camera, bounds.width, bounds.height);
       return Math.hypot(cameraX - x * bounds.width, cameraY - y * bounds.height) <= 16;
@@ -171,7 +213,12 @@ export class MockMapAdapter implements MapAdapter {
     this.draw();
   }
 
-  private openPopup(popup: HTMLElement, x: number, y: number, kind: 'camera' | 'map-point') {
+  private openPopup(
+    popup: HTMLElement,
+    x: number,
+    y: number,
+    kind: 'camera' | 'map-point' | 'handoff',
+  ) {
     if (!this.container) return;
     const replacedSelection = this.popupKind === 'map-point';
     this.closePopup();
@@ -188,12 +235,14 @@ export class MockMapAdapter implements MapAdapter {
     popup.style.top = `${y}px`;
     if (y < 170) popup.classList.add('mock-map-popup--below');
     this.container.append(popup);
+    this.container.classList.add('map-container--popup-open');
     this.popup = popup;
     this.popupKind = kind;
   }
 
   private closePopup() {
     this.popup?.remove();
+    this.container?.classList.remove('map-container--popup-open');
     this.popup = null;
     this.popupKind = null;
   }
@@ -230,6 +279,10 @@ export class MockMapAdapter implements MapAdapter {
     this.cameras.forEach((camera) => this.drawPoint(context, camera, width, height, '#dc3f35', 5));
     if (this.pendingSelection) {
       this.drawPoint(context, this.pendingSelection, width, height, '#1769e0', 7);
+    }
+    if (this.handoff) {
+      const color = this.handoff.crossing.direction === 'OUTBOUND' ? '#b45309' : '#087f6b';
+      this.drawPoint(context, this.handoff.navigationHandoff.gcj02, width, height, color, 9);
     }
     if (this.start?.coordinate.coordinateSystem === 'GCJ02') {
       this.drawPoint(context, this.start.coordinate, width, height, '#15803d', 8);

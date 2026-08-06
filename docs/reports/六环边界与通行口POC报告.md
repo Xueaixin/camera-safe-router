@@ -4,6 +4,8 @@
 数据日期：2026-07-29  
 验证日期：2026-08-04
 
+> 目录迁移说明（2026-08-06）：可重新生成的 POC 产物已从运行数据根迁移到仓库同级 `workspace/work`；下文产物路径已更新为迁移后的实际位置，验证统计仍对应 2026-08-04 的原始运行。
+
 ## 1. 结论
 
 当前京津冀 PBF 中，北京六环的 OSM 道路编号是 `G4501`，道路关系是 `r295982`。关系成员可以合并为两条有效、闭合且互相包含的车行环线，说明可以从现有数据生成六环业务边界候选。
@@ -14,16 +16,16 @@
 
 ## 2. 输入与产物
 
-- PBF：`E:\camera-safe-routing-data\osm\jingjinji-latest.osm.pbf`
+- PBF 当前位置：`F:\camera-safe-routing-data\osm\jingjinji-latest.osm.pbf`
 - PBF SHA-256：`2a1bcebc16586858bc116a67dd10b9e5191241bbbb096866d0d0a2538ca16131`
 - PBF 最新 OSM 时间戳：`2026-07-29T00:56:38Z`
 - GraphHopper 图指纹：`sha256:23c0009a6943af69973808f5d446698c6ebd3cc8a222b831025a59195a8ddafc`
-- 六环关系导出：`E:\camera-safe-routing-data\work\sixth-ring-poc\20260804-compliant-distance-v1\g4501-relation.geojson`
-- 边界候选：`E:\camera-safe-routing-data\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-boundary-candidate.geojson`
-- 100 米几何簇：`E:\camera-safe-routing-data\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-crossing-candidates.geojson`
-- 有向 edge-key 候选：`E:\camera-safe-routing-data\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-directed-candidates.geojson`
-- 多目标搜索报告：`E:\camera-safe-routing-data\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-multitarget-search-report.md`
-- 完整运行报告：`E:\camera-safe-routing-data\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-poc-report.md`
+- 六环关系导出：`F:\CodexProjects\routing-plan\workspace\work\sixth-ring-poc\20260804-compliant-distance-v1\g4501-relation.geojson`
+- 边界候选：`F:\CodexProjects\routing-plan\workspace\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-boundary-candidate.geojson`
+- 100 米几何簇：`F:\CodexProjects\routing-plan\workspace\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-crossing-candidates.geojson`
+- 有向 edge-key 候选：`F:\CodexProjects\routing-plan\workspace\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-directed-candidates.geojson`
+- 多目标搜索报告：`F:\CodexProjects\routing-plan\workspace\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-multitarget-search-report.md`
+- 完整运行报告：`F:\CodexProjects\routing-plan\workspace\work\sixth-ring-poc\20260804-production-topology-v1\sixth-ring-poc-report.md`
 
 以上均为可重新生成的 POC 产物。PBF、GraphHopper 缓存和派生 GeoJSON 不提交 Git。
 

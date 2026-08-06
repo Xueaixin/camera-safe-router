@@ -18,6 +18,7 @@ import cn.camera.safe.coordinate.Gcj02Coordinate;
 import cn.camera.safe.coordinate.Wgs84Coordinate;
 import cn.camera.safe.routing.BlockedEdgeSnapshot;
 import cn.camera.safe.routing.GraphHopperManager;
+import cn.camera.safe.routing.NavigationHandoffPoint;
 import cn.camera.safe.routing.PlannedRoute;
 import cn.camera.safe.routing.RouteLeg;
 import cn.camera.safe.routing.RoutePlanner;
@@ -202,12 +203,10 @@ public class RoutePlanningServiceTest {
         RoutePlanner planner = mock(RoutePlanner.class);
         Wgs84Coordinate start = new Wgs84Coordinate(116.39, 39.90);
         Wgs84Coordinate crossing = new Wgs84Coordinate(116.40, 39.905);
+        Wgs84Coordinate handoff = new Wgs84Coordinate(116.5, 40.0);
         Wgs84Coordinate end = new Wgs84Coordinate(116.41, 39.91);
-        RouteLeg safe = new RouteLeg(500, 60_000, List.of(start, crossing));
-        RouteLeg reference = new RouteLeg(
-                1_000,
-                120_000,
-                List.of(crossing, new Wgs84Coordinate(116.5, 40.0), end));
+        RouteLeg safe = new RouteLeg(900, 100_000, List.of(start, crossing, handoff));
+        RouteLeg reference = new RouteLeg(600, 80_000, List.of(handoff, end));
         SixthRingPortal portal = new SixthRingPortal(
                 "portal-1",
                 10,
@@ -224,8 +223,16 @@ public class RoutePlanningServiceTest {
                 "boundary-v1",
                 SixthRingPortal.Direction.OUTBOUND,
                 portal,
+                new NavigationHandoffPoint(
+                        handoff,
+                        320,
+                        "沙河路",
+                        NavigationHandoffPoint.Segment.REFERENCE,
+                        1),
                 safe,
                 reference,
+                new cn.camera.safe.routing.ExternalHandoffPoint(
+                        new Wgs84Coordinate(116.6, 40.1), 500, 200),
                 1_500,
                 180_000,
                 List.of(start, crossing, new Wgs84Coordinate(116.5, 40.0), end),
@@ -240,8 +247,9 @@ public class RoutePlanningServiceTest {
         assertThat(response.boundaryCrossing().portalId()).isEqualTo("portal-1");
         assertThat(response.boundaryCrossing().wgs84().lng()).isEqualTo(crossing.lng());
         assertThat(response.boundaryCrossing().gcj02().lng()).isNotEqualTo(crossing.lng());
-        assertThat(response.safeSegment().geometry()).hasSize(2);
-        assertThat(response.referenceSegment().geometry()).hasSize(3);
+        assertThat(response.navigationHandoff().roadName()).isEqualTo("沙河路");
+        assertThat(response.safeSegment().geometry()).hasSize(3);
+        assertThat(response.referenceSegment().geometry()).hasSize(2);
     }
 
     @Test
@@ -254,12 +262,10 @@ public class RoutePlanningServiceTest {
         RoutePlanner planner = mock(RoutePlanner.class);
         Wgs84Coordinate start = new Wgs84Coordinate(116.39, 39.90);
         Wgs84Coordinate crossing = new Wgs84Coordinate(116.40, 39.905);
+        Wgs84Coordinate handoff = new Wgs84Coordinate(116.5, 40.0);
         Wgs84Coordinate end = new Wgs84Coordinate(116.41, 39.91);
-        RouteLeg safe = new RouteLeg(500, 60_000, List.of(start, crossing));
-        RouteLeg reference = new RouteLeg(
-                1_000,
-                120_000,
-                List.of(crossing, new Wgs84Coordinate(116.5, 40.0), end));
+        RouteLeg safe = new RouteLeg(900, 100_000, List.of(start, crossing, handoff));
+        RouteLeg reference = new RouteLeg(600, 80_000, List.of(handoff, end));
         SixthRingPortal portal = new SixthRingPortal(
                 "portal-1",
                 10,
@@ -276,8 +282,16 @@ public class RoutePlanningServiceTest {
                 "boundary-v1",
                 SixthRingPortal.Direction.OUTBOUND,
                 portal,
+                new NavigationHandoffPoint(
+                        handoff,
+                        320,
+                        "沙河路",
+                        NavigationHandoffPoint.Segment.REFERENCE,
+                        1),
                 safe,
                 reference,
+                new cn.camera.safe.routing.ExternalHandoffPoint(
+                        new Wgs84Coordinate(116.6, 40.1), 500, 200),
                 1_500,
                 180_000,
                 List.of(start, crossing, new Wgs84Coordinate(116.5, 40.0), end),
@@ -327,7 +341,9 @@ public class RoutePlanningServiceTest {
                 "boundary-v1",
                 null,
                 null,
+                null,
                 leg,
+                null,
                 null,
                 leg.distanceMeters(),
                 leg.durationMillis(),

@@ -1,4 +1,10 @@
-import type { CameraView, OutputCoordinate } from './api';
+import type {
+  BoundaryCrossing,
+  CameraView,
+  ExternalHandoff,
+  NavigationHandoff,
+  OutputCoordinate,
+} from './api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from './coordinate';
 
 export interface PlaceSuggestion {
@@ -25,6 +31,14 @@ export interface MapViewport {
 
 export interface MapAdapterCallbacks {
   onEndpointSelect: (selection: MapSelection, target: MapEndpointTarget) => void;
+  onHandoffSegmentSelect: () => void;
+}
+
+export interface HandoffMarkerData {
+  crossing: BoundaryCrossing;
+  navigationHandoff: NavigationHandoff;
+  externalHandoff: ExternalHandoff;
+  outerEndpoint: OutputCoordinate;
 }
 
 export interface MapAdapter {
@@ -33,6 +47,7 @@ export interface MapAdapter {
   searchPlaces(keyword: string, signal?: AbortSignal): Promise<PlaceSuggestion[]>;
   convertWgs84ToGcj02(coordinate: Coordinate): Promise<Coordinate & { coordinateSystem: 'GCJ02' }>;
   setEndpointMarkers(start: SelectedPlace | null, end: SelectedPlace | null): void;
+  setHandoffMarker(data: HandoffMarkerData | null): void;
   setRoute(geometry: OutputCoordinate[]): void;
   clearRoute(): void;
   fitRoute(geometry: OutputCoordinate[]): void;

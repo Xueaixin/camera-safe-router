@@ -4,9 +4,11 @@ import {
   type BoundaryCrossing,
   type BoundaryDirection,
   type BoundaryRole,
+  type ExternalHandoff,
   type CameraPage,
   type CameraSnapshotStatus,
   type HealthResponse,
+  type NavigationHandoff,
   type ReadinessResponse,
   type RouteResponse,
   type RoutePlanningMode,
@@ -110,6 +112,39 @@ function parseBoundaryCrossing(value: unknown): BoundaryCrossing {
   };
 }
 
+function parseExternalHandoff(value: unknown): ExternalHandoff {
+  if (!isRecord(value)) throw new ProtocolError('环外交接位置结构无效');
+  if (
+    !isNonNegativeNumber(value.boundaryClearanceMeters) ||
+    !isNonNegativeInteger(value.poiSearchRadiusMeters)
+  ) {
+    throw new ProtocolError('环外交接位置边界距离或搜索半径无效');
+  }
+  return {
+    wgs84: outputCoordinate(value.wgs84, '环外交接位置 WGS84'),
+    gcj02: outputCoordinate(value.gcj02, '环外交接位置 GCJ02'),
+    boundaryClearanceMeters: value.boundaryClearanceMeters,
+    poiSearchRadiusMeters: value.poiSearchRadiusMeters,
+  };
+}
+
+function parseNavigationHandoff(value: unknown): NavigationHandoff {
+  if (!isRecord(value)) throw new ProtocolError('导航交接点结构无效');
+  if (!isNonNegativeNumber(value.boundaryClearanceMeters) || value.boundaryClearanceMeters <= 0) {
+    throw new ProtocolError('导航交接点边界距离无效');
+  }
+  const roadName = value.roadName;
+  if (roadName !== undefined && roadName !== null && typeof roadName !== 'string') {
+    throw new ProtocolError('导航交接点道路名称无效');
+  }
+  return {
+    wgs84: outputCoordinate(value.wgs84, '导航交接点 WGS84'),
+    gcj02: outputCoordinate(value.gcj02, '导航交接点 GCJ02'),
+    boundaryClearanceMeters: value.boundaryClearanceMeters,
+    ...(roadName !== undefined ? { roadName } : {}),
+  };
+}
+
 function parseStep(value: unknown): RouteStep {
   if (!isRecord(value)) throw new ProtocolError('路线步骤结构无效');
   const distanceMeters = value.distanceMeters;
@@ -157,10 +192,16 @@ export function parseRouteResponse(value: unknown): RouteResponse {
   const mode = planningMode(value.planningMode);
   const directionValue = requiredNullable(value, 'boundaryDirection');
   const crossingValue = requiredNullable(value, 'boundaryCrossing');
+  const navigationHandoffValue = requiredNullable(value, 'navigationHandoff');
+  const externalHandoffValue = requiredNullable(value, 'externalHandoff');
   const safeValue = requiredNullable(value, 'safeSegment');
   const referenceValue = requiredNullable(value, 'referenceSegment');
   const direction = directionValue === null ? null : boundaryDirection(directionValue);
   const crossing = crossingValue === null ? null : parseBoundaryCrossing(crossingValue);
+  const navigationHandoff =
+    navigationHandoffValue === null ? null : parseNavigationHandoff(navigationHandoffValue);
+  const externalHandoff =
+    externalHandoffValue === null ? null : parseExternalHandoff(externalHandoffValue);
   const safeSegment = safeValue === null ? null : parseSegment(safeValue, '环内安全段');
   const referenceSegment =
     referenceValue === null ? null : parseSegment(referenceValue, '环外参考段');
@@ -169,12 +210,16 @@ export function parseRouteResponse(value: unknown): RouteResponse {
     mode === 'INTERNAL_SAFE' &&
     direction === null &&
     crossing === null &&
+    navigationHandoff === null &&
+    externalHandoff === null &&
     safeSegment !== null &&
     referenceSegment === null;
   const externalShape =
     mode === 'EXTERNAL_ONLY' &&
     direction === null &&
     crossing === null &&
+    navigationHandoff === null &&
+    externalHandoff === null &&
     safeSegment === null &&
     referenceSegment !== null;
   const expectedDirection =
@@ -189,13 +234,27 @@ export function parseRouteResponse(value: unknown): RouteResponse {
       : mode === 'CROSS_BOUNDARY_INBOUND'
         ? 'INNER_ENTRY'
         : null;
+  const navigationJoinMatches =
+    navigationHandoff === null ||
+    (expectedDirection === 'OUTBOUND'
+      ? safeSegment?.geometry.at(-1)?.lng === navigationHandoff.gcj02.lng &&
+        safeSegment?.geometry.at(-1)?.lat === navigationHandoff.gcj02.lat &&
+        referenceSegment?.geometry[0]?.lng === navigationHandoff.gcj02.lng &&
+        referenceSegment?.geometry[0]?.lat === navigationHandoff.gcj02.lat
+      : expectedDirection === 'INBOUND' &&
+        safeSegment?.geometry[0]?.lng === navigationHandoff.gcj02.lng &&
+        safeSegment?.geometry[0]?.lat === navigationHandoff.gcj02.lat &&
+        referenceSegment?.geometry.at(-1)?.lng === navigationHandoff.gcj02.lng &&
+        referenceSegment?.geometry.at(-1)?.lat === navigationHandoff.gcj02.lat);
   const crossBoundaryShape =
     expectedDirection !== null &&
     direction === expectedDirection &&
     crossing?.direction === expectedDirection &&
     crossing?.boundaryRole === expectedRole &&
+    externalHandoff !== null &&
     safeSegment !== null &&
-    referenceSegment !== null;
+    referenceSegment !== null &&
+    navigationJoinMatches;
   if (!internalShape && !externalShape && !crossBoundaryShape) {
     throw new ProtocolError('路线规划模式与分段结构不一致');
   }
@@ -206,6 +265,8 @@ export function parseRouteResponse(value: unknown): RouteResponse {
     boundaryVersion: stringField(value, 'boundaryVersion'),
     boundaryDirection: direction,
     boundaryCrossing: crossing,
+    navigationHandoff,
+    externalHandoff,
     safeSegment,
     referenceSegment,
     distanceMeters,

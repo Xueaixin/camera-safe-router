@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$DataRoot,
+    [string]$WorkspaceRoot,
     [string]$SourcePath,
     [string]$OsmiumPath,
     [string]$OutputPath,
@@ -9,6 +10,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+$codeRoot = Split-Path -Parent $PSScriptRoot
+$resolvedCodeRoot = (Resolve-Path -LiteralPath $codeRoot).Path
+$projectRoot = Split-Path -Parent $resolvedCodeRoot
 
 function Invoke-Osmium {
     param(
@@ -36,8 +41,6 @@ function Invoke-OsmiumJson {
 }
 
 if ([string]::IsNullOrWhiteSpace($DataRoot)) {
-    $codeRoot = Split-Path -Parent $PSScriptRoot
-    $resolvedCodeRoot = (Resolve-Path -LiteralPath $codeRoot).Path
     $driveRoot = [System.IO.Path]::GetPathRoot($resolvedCodeRoot)
     if ([string]::IsNullOrWhiteSpace($driveRoot)) {
         throw "Cannot determine the drive root for $resolvedCodeRoot"
@@ -46,6 +49,10 @@ if ([string]::IsNullOrWhiteSpace($DataRoot)) {
 }
 
 $resolvedDataRoot = [System.IO.Path]::GetFullPath($DataRoot)
+if ([string]::IsNullOrWhiteSpace($WorkspaceRoot)) {
+    $WorkspaceRoot = Join-Path $projectRoot 'workspace'
+}
+$resolvedWorkspaceRoot = [System.IO.Path]::GetFullPath($WorkspaceRoot)
 $boundValues = @($Bounds.Split(',') | ForEach-Object {
     [double]::Parse($_.Trim(), [System.Globalization.CultureInfo]::InvariantCulture)
 })
@@ -57,10 +64,10 @@ if ($boundValues[0] -ge $boundValues[2] -or $boundValues[1] -ge $boundValues[3])
 }
 
 if ([string]::IsNullOrWhiteSpace($SourcePath)) {
-    $SourcePath = Join-Path $resolvedDataRoot 'osm\china-latest.osm.pbf'
+    $SourcePath = Join-Path $resolvedWorkspaceRoot 'downloads\osm\china-latest.osm.pbf'
 }
 if ([string]::IsNullOrWhiteSpace($OsmiumPath)) {
-    $OsmiumPath = Join-Path $resolvedDataRoot 'tools\osmium-env\Library\bin\osmium.exe'
+    $OsmiumPath = Join-Path $resolvedWorkspaceRoot 'tools\osmium-env\Library\bin\osmium.exe'
 }
 
 $resolvedSourcePath = [System.IO.Path]::GetFullPath($SourcePath)
@@ -83,7 +90,7 @@ if ([string]::IsNullOrWhiteSpace($sourceTimestamp)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $outputDirectory = Join-Path $resolvedDataRoot 'work\osm'
+    $outputDirectory = Join-Path $resolvedWorkspaceRoot 'work\osm'
     $OutputPath = Join-Path $outputDirectory "jingjinji-smart-$sourceDate-$($sourceHash.Substring(0, 12)).osm.pbf"
 }
 
@@ -169,6 +176,8 @@ $extractInfo = Invoke-OsmiumJson -Arguments @('fileinfo', '--extended', '--json'
 $extractHash = (Get-FileHash -LiteralPath $resolvedOutputPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
 [PSCustomObject]@{
+    DataRoot = $resolvedDataRoot
+    WorkspaceRoot = $resolvedWorkspaceRoot
     SourcePath = $resolvedSourcePath
     SourceTimestamp = $sourceTimestamp
     SourceSha256 = $sourceHash

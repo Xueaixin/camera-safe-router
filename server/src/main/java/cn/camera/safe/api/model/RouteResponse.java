@@ -13,6 +13,8 @@ public record RouteResponse(
         String boundaryVersion,
         BoundaryDirection boundaryDirection,
         BoundaryCrossing boundaryCrossing,
+        NavigationHandoff navigationHandoff,
+        ExternalHandoff externalHandoff,
         RouteSegment safeSegment,
         RouteSegment referenceSegment,
         double distanceMeters,
@@ -34,7 +36,8 @@ public record RouteResponse(
         }
         switch (planningMode) {
             case INTERNAL_SAFE -> {
-                if (boundaryDirection != null || boundaryCrossing != null
+                if (boundaryDirection != null || boundaryCrossing != null || navigationHandoff != null
+                        || externalHandoff != null
                         || safeSegment == null || referenceSegment != null) {
                     throw new IllegalArgumentException("invalid INTERNAL_SAFE response shape");
                 }
@@ -42,13 +45,16 @@ public record RouteResponse(
             case CROSS_BOUNDARY_OUTBOUND -> validateCrossBoundary(
                     BoundaryDirection.OUTBOUND,
                     BoundaryRole.OUTER_EXIT,
-                    boundaryDirection, boundaryCrossing, safeSegment, referenceSegment);
+                    boundaryDirection, boundaryCrossing, navigationHandoff, externalHandoff,
+                    safeSegment, referenceSegment);
             case CROSS_BOUNDARY_INBOUND -> validateCrossBoundary(
                     BoundaryDirection.INBOUND,
                     BoundaryRole.INNER_ENTRY,
-                    boundaryDirection, boundaryCrossing, safeSegment, referenceSegment);
+                    boundaryDirection, boundaryCrossing, navigationHandoff, externalHandoff,
+                    safeSegment, referenceSegment);
             case EXTERNAL_ONLY -> {
-                if (boundaryDirection != null || boundaryCrossing != null
+                if (boundaryDirection != null || boundaryCrossing != null || navigationHandoff != null
+                        || externalHandoff != null
                         || safeSegment != null || referenceSegment == null) {
                     throw new IllegalArgumentException("invalid EXTERNAL_ONLY response shape");
                 }
@@ -61,13 +67,28 @@ public record RouteResponse(
             BoundaryRole expectedRole,
             BoundaryDirection direction,
             BoundaryCrossing crossing,
+            NavigationHandoff navigationHandoff,
+            ExternalHandoff externalHandoff,
             RouteSegment safe,
             RouteSegment reference) {
         if (direction != expectedDirection || crossing == null
                 || crossing.direction() != expectedDirection
                 || crossing.boundaryRole() != expectedRole
-                || safe == null || reference == null) {
+                || externalHandoff == null || safe == null || reference == null) {
             throw new IllegalArgumentException("invalid cross-boundary response shape");
+        }
+        if (navigationHandoff != null) {
+            OutputCoordinate safeJoin = expectedDirection == BoundaryDirection.OUTBOUND
+                    ? safe.geometry().getLast()
+                    : safe.geometry().getFirst();
+            OutputCoordinate referenceJoin = expectedDirection == BoundaryDirection.OUTBOUND
+                    ? reference.geometry().getFirst()
+                    : reference.geometry().getLast();
+            if (!navigationHandoff.gcj02().equals(safeJoin)
+                    || !navigationHandoff.gcj02().equals(referenceJoin)) {
+                throw new IllegalArgumentException(
+                        "navigation handoff must equal the safe/reference segment join");
+            }
         }
     }
 }

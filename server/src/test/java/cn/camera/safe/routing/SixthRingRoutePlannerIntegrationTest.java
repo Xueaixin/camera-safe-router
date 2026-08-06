@@ -100,6 +100,47 @@ class SixthRingRoutePlannerIntegrationTest {
                 assertThat(validator.validate(route.safeSegment().geometry(), snapshot).conflictCount())
                         .as(id + " safe segment conflicts").isZero();
                 assertThat(route.geometry()).as(id + " complete geometry").hasSizeGreaterThan(1);
+                if (fixture.has("maxReferenceJoinStepMeters")) {
+                    List<Wgs84Coordinate> fullGeometry = route.geometry();
+                    int crossingIndex = fullGeometry.indexOf(route.boundaryCrossing().crossing());
+                    assertThat(crossingIndex).as(id + " crossing geometry index")
+                            .isBetween(1, fullGeometry.size() - 2);
+                    double joinStepMeters = direction == SixthRingPortal.Direction.OUTBOUND
+                            ? GeoDistance.meters(
+                                    fullGeometry.get(crossingIndex),
+                                    fullGeometry.get(crossingIndex + 1))
+                            : GeoDistance.meters(
+                                    fullGeometry.get(crossingIndex - 1),
+                                    fullGeometry.get(crossingIndex));
+                    assertThat(joinStepMeters)
+                            .as(id + " first topology-preserving reference step")
+                            .isLessThanOrEqualTo(fixture.path("maxReferenceJoinStepMeters").asDouble());
+                }
+                if (route.navigationHandoff() != null) {
+                    Wgs84Coordinate handoff = route.navigationHandoff().coordinate();
+                    assertThat(route.navigationHandoff().boundaryClearanceMeters())
+                            .as(id + " navigation handoff clearance").isPositive();
+                    assertThat(direction == SixthRingPortal.Direction.OUTBOUND
+                            ? route.safeSegment().geometry().getLast()
+                            : route.safeSegment().geometry().getFirst())
+                            .as(id + " safe segment handoff").isEqualTo(handoff);
+                    assertThat(direction == SixthRingPortal.Direction.OUTBOUND
+                            ? route.referenceSegment().geometry().getFirst()
+                            : route.referenceSegment().geometry().getLast())
+                            .as(id + " reference segment handoff").isEqualTo(handoff);
+                }
+                if (fixture.path("requiresNavigationHandoff").asBoolean(false)) {
+                    assertThat(route.navigationHandoff())
+                            .as(id + " ordinary-road navigation handoff").isNotNull();
+                    assertThat(route.navigationHandoff().coordinate())
+                            .as(id + " handoff differs from technical boundary")
+                            .isNotEqualTo(route.boundaryCrossing().crossing());
+                }
+                if (fixture.hasNonNull("navigationHandoffSegment")) {
+                    assertThat(route.navigationHandoff().segment().name())
+                            .as(id + " navigation handoff source segment")
+                            .isEqualTo(fixture.path("navigationHandoffSegment").asText());
+                }
                 assertThat(quadrant(center, route.boundaryCrossing().crossing()))
                         .as(id + " selected quadrant")
                         .isEqualTo(fixture.path("quadrant").asText());
@@ -127,7 +168,7 @@ class SixthRingRoutePlannerIntegrationTest {
                 signatures.add(id + ":INTERNAL:" + Math.round(route.distanceMeters()));
             }
 
-            assertThat(signatures).hasSize(12);
+            assertThat(signatures).hasSize(14);
             signatures.forEach(signature -> System.out.println(
                     "PRODUCTION_SIXTH_RING_ROUTE " + signature));
         } finally {

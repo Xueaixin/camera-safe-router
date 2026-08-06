@@ -5,7 +5,13 @@ import { ApiClientError } from '@/services/errors';
 import type { ApiClient } from '@/services/apiClient';
 import type { CameraPage } from '@/types/api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from '@/types/coordinate';
-import type { MapAdapter, MapAdapterCallbacks, MapViewport, PlaceSuggestion } from '@/types/map';
+import type {
+  HandoffMarkerData,
+  MapAdapter,
+  MapAdapterCallbacks,
+  MapViewport,
+  PlaceSuggestion,
+} from '@/types/map';
 
 class MapStub implements MapAdapter {
   viewport: MapViewport = {
@@ -25,6 +31,7 @@ class MapStub implements MapAdapter {
     return { ...coordinate, coordinateSystem: 'GCJ02' as const };
   }
   setEndpointMarkers(_start: SelectedPlace | null, _end: SelectedPlace | null) {}
+  setHandoffMarker(_data: HandoffMarkerData | null) {}
   setRoute() {}
   clearRoute() {}
   fitRoute() {}
@@ -129,9 +136,7 @@ describe('camera viewport controller', () => {
     controller.start();
     await vi.runOnlyPendingTimersAsync();
 
-    expect(onError).toHaveBeenLastCalledWith(
-      '查询范围内点位超过服务返回上限，请放大地图后重试',
-    );
+    expect(onError).toHaveBeenLastCalledWith('查询范围内点位超过服务返回上限，请放大地图后重试');
     controller.stop();
     vi.useRealTimers();
   });

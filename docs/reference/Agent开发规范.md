@@ -8,13 +8,13 @@
 
 1. `README.md`
 2. `docs/README.md`
-3. `docs/产品需求与技术方案.md`
-4. `docs/运行配置与数据目录.md`
-5. `docs/坐标系与接口约定.md`
-6. `docs/开发计划与当前进度.md`
+3. `docs/plans/产品需求与技术方案.md`
+4. `docs/guides/运行配置与数据目录.md`
+5. `docs/reference/坐标系与接口约定.md`
+6. `docs/plans/开发计划与当前进度.md`
 7. 与任务相关的源代码和测试
 
-涉及数据更新时继续读取 `docs/自动化数据更新方案.md`；涉及联调或验收时读取 `docs/验证与测试指南.md` 和 `docs/api-contract.yaml`。
+涉及数据更新时继续读取 `docs/plans/自动化数据更新方案.md`；涉及联调或验收时读取 `docs/guides/验证与测试指南.md` 和 `docs/reference/api-contract.yaml`。
 
 `docs/archive` 只用于历史追溯，不是当前实施依据。
 
@@ -34,7 +34,7 @@
 | 前端 | `web/**`、对应前端文档 | UI 状态、协议测试、构建结果、真实地图待验证项 |
 | 后端 | `server/**`、对应后端文档 | API/路由实现、单元测试、真实数据测试入口、资源影响 |
 | 数据自动化 | 未来 updater 模块、脚本、自动化文档 | 原子发布、校验、回滚、幂等和调度说明 |
-| 契约/总控 | `docs/api-contract.yaml`、共享文档和双方契约测试 | 兼容性分析、迁移步骤和联调结果 |
+| 契约/总控 | `docs/reference/api-contract.yaml`、共享文档和双方契约测试 | 兼容性分析、迁移步骤和联调结果 |
 | 验证审查 | 原则上只读；确认后修复所属范围 | 问题清单、证据、已执行命令和残余风险 |
 
 需要跨边界修改时，先说明原因和受影响会话；不要顺手重构无关模块。
@@ -56,7 +56,7 @@
 
 ## 6. 契约修改规则
 
-`docs/api-contract.yaml` 是唯一 HTTP 契约。修改 API 时必须同一任务完成：
+`docs/reference/api-contract.yaml` 是唯一 HTTP 契约。修改 API 时必须同一任务完成：
 
 1. 说明兼容性和调用方影响。
 2. 更新 OpenAPI。
@@ -144,7 +144,7 @@
 ## 12. 任务提示词模板
 
 ```text
-请先完整读取 README.md、docs/README.md、docs/Agent开发规范.md，
+请先完整读取 README.md、docs/README.md、docs/reference/Agent开发规范.md，
 再读取本任务涉及的源码、测试和契约。
 
 任务目标：<一个可独立验证的目标>

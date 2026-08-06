@@ -13,10 +13,10 @@
 - 当前保留 5,707 个点，其中 30 米匹配 5,688 个、未匹配 19 个。
 - 摄像头远程更新已支持后端内部定时执行和本机手动触发；默认关闭，确认数据源使用许可后通过环境变量开启。
 - 后端业务日志使用中文，同时输出到控制台和数据根目录的 `logs`，按日期和大小滚动归档。
-- 京津冀路网和 `COMPLIANT_DISTANCE_V1` 已成为后端默认：启用 OSM 转向限制、距离主导权重和受限道路端点例外。六环生产拓扑、多目标搜索和 OpenAPI 1.1 已接入正式路线接口，东南西北 8 条跨界路线与 4 条环内路线均通过真实图零冲突回归；候选边界和 4 个保留位置仍未获生产批准。
+- 京津冀路网和 `COMPLIANT_DISTANCE_V1` 已成为后端默认：启用 OSM 转向限制、距离主导权重和受限道路端点例外。六环生产拓扑、多目标搜索、跨界单调硬约束和 OpenAPI 1.3 已接入正式路线接口；当前规划器的 10 条跨界与 4 条环内路线已通过真实图零冲突回归，候选边界、地图人工验收和 4 个保留位置仍未获生产批准。
 - 当前仅承诺京津冀候选范围内的驾车和手动重新规划，不包含自动偏航重算和逐向导航。
 
-详细进度和未完成项见 [开发计划与当前进度](docs/开发计划与当前进度.md)。
+详细进度和未完成项见 [开发计划与当前进度](docs/plans/开发计划与当前进度.md)。
 
 ## 核心设计
 
@@ -54,7 +54,7 @@ flowchart LR
 code/
 ├─ README.md                 项目入口
 ├─ .gitignore               统一忽略规则
-├─ docs/                    当前规范、计划、契约和验证报告
+├─ docs/                    按 plans、guides、reference、reports 分类的当前文档
 ├─ scripts/                 跨模块开发辅助脚本
 ├─ server/                  Java 后端
 └─ web/                     Vue 前端
@@ -62,11 +62,11 @@ code/
 
 PBF、摄像头 JSON、图缓存、运行快照、证书和真实密钥不属于 Git 仓库。
 
-后端包职责、前端目录、启动/路线/更新调用链以及常见改动位置见 [代码结构与核心流程](docs/代码结构与核心流程.md)。
+后端包职责、前端目录、启动/路线/更新调用链以及常见改动位置见 [代码结构与核心流程](docs/reference/代码结构与核心流程.md)。
 
-## 外部数据目录
+## 运行数据与离线工作区
 
-Windows 默认使用后端启动所在盘根目录的 `camera-safe-routing-data`。例如从 `F:` 盘的 IDEA 工程启动，默认目录为：
+Windows 默认使用后端启动所在盘根目录的 `camera-safe-routing-data`。该目录只保存服务启动输入和运行产物；例如从 `F:` 盘的 IDEA 工程启动时：
 
 ```text
 F:\camera-safe-routing-data\
@@ -76,16 +76,31 @@ F:\camera-safe-routing-data\
 ├─ graph-cache\jingjinji-compliant-distance-v1\
 ├─ graph-cache\jingjinji\             旧 profile 回退缓存，可选保留
 ├─ snapshots\
-├─ downloads\
-├─ work\
-├─ backups\
+├─ downloads\cameras\
+├─ failed\cameras\
+├─ backups\cameras\
 └─ logs\
 ```
 
-在 `code` 目录执行以下脚本可创建结构：
+离线下载、PBF 切分、候选构图、六环分析、工具和审查材料统一放在仓库同级的工作区，不是服务启动依赖：
+
+```text
+F:\CodexProjects\routing-plan\workspace\
+├─ downloads\osm\
+├─ tools\
+├─ work\osm\
+├─ work\graph-cache-candidates\
+├─ work\sixth-ring\
+├─ reports\
+├─ reviews\
+└─ archive\
+```
+
+在 `code` 目录执行以下脚本可分别创建两棵目录结构：
 
 ```powershell
 .\scripts\init-data-directory.ps1
+.\scripts\init-workspace-directory.ps1
 ```
 
 如果希望使用其他位置，只设置一个系统或 IDEA 环境变量即可：
@@ -94,7 +109,7 @@ F:\camera-safe-routing-data\
 ROUTING_DATA_ROOT=D:\camera-safe-routing-data
 ```
 
-单项路径仍可覆盖，但普通开发不需要。完整规则见 [运行配置与数据目录](docs/运行配置与数据目录.md)。
+单项路径仍可覆盖，但普通开发不需要。完整规则见 [运行配置与数据目录](docs/guides/运行配置与数据目录.md)。
 
 ## 数据来源
 
@@ -116,11 +131,11 @@ OSM 数据遵循 Open Database License，地图或衍生数据发布时必须保
 - IntelliJ IDEA、WebStorm 可选
 - 高德 Web JS Key 和安全密钥，仅保存在 `web/.env.local`
 
-`osmium-tool` 只在从中国 PBF 离线切分京津冀数据时需要，运行 Spring Boot 服务不需要它。Windows 可以使用便携 `micromamba` 在数据目录创建隔离环境，无需修改全局 PATH 或现有 Python：
+`osmium-tool` 只在从中国 PBF 离线切分京津冀数据时需要，运行 Spring Boot 服务不需要它。Windows 可以使用便携 `micromamba` 在离线工作区创建隔离环境，无需修改全局 PATH 或现有 Python：
 
 ```powershell
-$dataRoot = 'E:\camera-safe-routing-data'
-$micromambaHome = Join-Path $dataRoot 'tools\micromamba'
+$workspaceRoot = 'F:\CodexProjects\routing-plan\workspace'
+$micromambaHome = Join-Path $workspaceRoot 'tools\micromamba'
 $micromambaArchive = Join-Path $micromambaHome 'micromamba-win-64.tar.bz2'
 New-Item -ItemType Directory -Path $micromambaHome -Force | Out-Null
 Invoke-WebRequest `
@@ -128,24 +143,25 @@ Invoke-WebRequest `
   -OutFile $micromambaArchive
 tar.exe -xjf $micromambaArchive -C $micromambaHome
 
-$micromamba = Join-Path $dataRoot 'tools\micromamba\Library\bin\micromamba.exe'
-$env:MAMBA_ROOT_PREFIX = Join-Path $dataRoot 'tools\micromamba-root'
+$micromamba = Join-Path $workspaceRoot 'tools\micromamba\Library\bin\micromamba.exe'
+$env:MAMBA_ROOT_PREFIX = Join-Path $workspaceRoot 'tools\micromamba-root'
 & $micromamba create -y `
-  -p (Join-Path $dataRoot 'tools\osmium-env') `
+  -p (Join-Path $workspaceRoot 'tools\osmium-env') `
   -c conda-forge `
   'osmium-tool=1.19.1'
 ```
 
-上述压缩包来自 [micromamba 官方 Windows 下载地址](https://micro.mamba.pm/api/micromamba/win-64/latest)。当前本机工具路径是 `E:\camera-safe-routing-data\tools\osmium-env\Library\bin\osmium.exe`。Linux 服务器可以安装发行版的 `osmium-tool`，但若直接上传本地切分好的京津冀 PBF，服务端不需要再安装。
+上述压缩包来自 [micromamba 官方 Windows 下载地址](https://micro.mamba.pm/api/micromamba/win-64/latest)。默认工具路径是 `F:\CodexProjects\routing-plan\workspace\tools\osmium-env\Library\bin\osmium.exe`。Linux 服务器可以安装发行版的 `osmium-tool`，但若直接上传本地切分好的京津冀 PBF，服务端不需要再安装。
 
 切分和引用完整性检查：
 
 ```powershell
 .\scripts\prepare-jingjinji-osm.ps1 `
-  -DataRoot 'E:\camera-safe-routing-data'
+  -WorkspaceRoot 'F:\CodexProjects\routing-plan\workspace' `
+  -DataRoot 'F:\camera-safe-routing-data'
 ```
 
-脚本使用 `smart` 策略和 `113.0,35.5,120.5,43.0` 边界，检查所有 way 节点引用，并单独检查 GraphHopper 使用的 `type=restriction` 关系。当前 POC 明细见 [京津冀路网 POC 验证报告](docs/京津冀路网POC验证报告.md)。
+脚本默认读取 `workspace/downloads/osm/china-latest.osm.pbf`，把候选产物写到 `workspace/work/osm`，不会自动覆盖运行目录中的正式 PBF。它使用 `smart` 策略和 `113.0,35.5,120.5,43.0` 边界，检查所有 way 节点引用，并单独检查 GraphHopper 使用的 `type=restriction` 关系。当前 POC 明细见 [京津冀路网 POC 验证报告](docs/reports/京津冀路网POC验证报告.md)。
 
 ## 后端启动
 
@@ -165,7 +181,7 @@ mvn spring-boot:run
 
 首次启动会解析 PBF 并生成 `jingjinji-compliant-distance-v1` 图缓存；后续启动直接加载缓存。PBF 内容或 profile/import 配置变化时不得继续复用旧缓存，服务会通过源文件与路由配置两份 SHA-256 元数据拒绝不一致组合。临时回退旧 profile 时可显式设置 `ROUTING_PROFILE_MODE=CURRENT`，它只会读取 `graph-cache/jingjinji`。
 
-业务日志默认写入数据根目录的 `logs/camera-safe-routing-server.log`，归档文件位于 `logs/archive`。完整滚动和保留配置见 [运行配置与数据目录](docs/运行配置与数据目录.md)。
+业务日志默认写入数据根目录的 `logs/camera-safe-routing-server.log`，归档文件位于 `logs/archive`。完整滚动和保留配置见 [运行配置与数据目录](docs/guides/运行配置与数据目录.md)。
 
 就绪检查：
 
@@ -246,7 +262,7 @@ https://192.168.1.20:5173
 
 手机与电脑必须处于同一局域网，Windows 防火墙需要允许 Node/Vite，且高德控制台应允许当前开发来源。地址栏仍有证书警告时，定位权限通常不会正常工作；证书可信后还要在浏览器站点设置中允许位置访问。
 
-完整真机检查项见 [验证与测试指南](docs/验证与测试指南.md)。
+完整真机检查项见 [验证与测试指南](docs/guides/验证与测试指南.md)。
 
 ## 常用验证
 
@@ -268,13 +284,13 @@ npm run test
 npm run build
 ```
 
-真实 PBF、摄像头匹配报告、零冲突路线、API 冒烟和手机验证的完整命令见 [验证与测试指南](docs/验证与测试指南.md)。
+真实 PBF、摄像头匹配报告、零冲突路线、API 冒烟和手机验证的完整命令见 [验证与测试指南](docs/guides/验证与测试指南.md)。
 
 ## API
 
-唯一机器可读契约为 [api-contract.yaml](docs/api-contract.yaml)。当前接口：
+唯一机器可读契约为 [api-contract.yaml](docs/reference/api-contract.yaml)。当前接口：
 
-路线响应已经实现 OpenAPI 1.1：服务端自动判定四种规划模式，跨界路线返回通行口、环内安全段、环外参考段和兼容的完整 `geometry`。当前默认边界仍为开发候选状态，不能据此声明已经满足生产发布条件。
+路线响应已经实现 OpenAPI 1.3：服务端自动判定四种规划模式。跨界路线分别返回用于技术审计的 `boundaryCrossing`、可证明位于普通道路上时才返回的 `navigationHandoff`、兼容保留的严格环外审计点 `externalHandoff`、分段路线和完整 `geometry`。前端默认保留完整路线，仅在 `navigationHandoff` 非空时标点并提供“设为起点/终点”；弹窗围绕该导航交接点解析 200 米内的交通地标，并提供基于 GCJ-02 精确坐标的高德导航。当前默认边界仍为开发候选状态，真实高德和地图人工验收尚未完成，不能据此声明已经满足生产发布条件。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -286,23 +302,15 @@ npm run build
 | `GET` | `/api/v1/health` | 进程存活状态 |
 | `GET` | `/api/v1/readiness` | 路网、摄像头和禁行边就绪状态 |
 
-坐标系和错误码约定见 [坐标系与接口约定](docs/坐标系与接口约定.md)。
+坐标系和错误码约定见 [坐标系与接口约定](docs/reference/坐标系与接口约定.md)。
 
 ## 文档入口
 
 - [文档索引](docs/README.md)
-- [产品需求与技术方案](docs/产品需求与技术方案.md)
-- [代码结构与核心流程](docs/代码结构与核心流程.md)
-- [运行配置与数据目录](docs/运行配置与数据目录.md)
-- [开发计划与当前进度](docs/开发计划与当前进度.md)
-- [自动化数据更新方案](docs/自动化数据更新方案.md)
-- [Agent 开发规范](docs/Agent开发规范.md)
-- [验证与测试指南](docs/验证与测试指南.md)
-- [新路网摄像头匹配验证报告](docs/新路网摄像头匹配验证报告.md)
-- [京津冀摄像头匹配验证报告](docs/京津冀摄像头匹配验证报告.md)
-- [京津冀路线回归报告](docs/京津冀路线回归报告.md)
-- [京津冀候选路线回归报告](docs/京津冀候选路线回归报告.md)
-- [六环东南西北真实路线回归报告](docs/六环东南西北真实路线回归报告.md)
+- [方案与进度](docs/plans/开发计划与当前进度.md)
+- [运行与验证指南](docs/guides/运行配置与数据目录.md)
+- [规范与接口契约](docs/reference/坐标系与接口约定.md)
+- [验证与回归报告](docs/reports/六环东南西北真实路线回归报告.md)
 
 ## Git 仓库状态
 

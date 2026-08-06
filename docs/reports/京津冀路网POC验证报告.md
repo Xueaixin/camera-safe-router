@@ -4,6 +4,8 @@
 
 验证时间：2026-08-02
 
+> 目录迁移说明（2026-08-06）：原 `work/osm` 和 `work/snapshots` 验证产物已迁移到仓库同级 `workspace/work`；下文对应产物路径已更新，验证统计仍对应 2026-08-02 的原始运行。
+
 ## 1. 结论
 
 本地 POC 通过。中国 PBF 已切分为独立京津冀候选文件，候选道路的 way 节点引用完整，GraphHopper 关注的转向限制关系引用完整。候选文件在独立缓存完成构图，当前生产过滤口径下的摄像头快照成功发布，四条京津冀跨城路线均返回零摄像头冲突。
@@ -62,7 +64,7 @@ E:\camera-safe-routing-data\osm\china-latest.osm.pbf
 最终候选文件：
 
 ```text
-E:\camera-safe-routing-data\work\osm\jingjinji-smart-20260729-25564ac2ef03.osm.pbf
+F:\CodexProjects\routing-plan\workspace\work\osm\jingjinji-smart-20260729-25564ac2ef03.osm.pbf
 ```
 
 | 项目 | 值 |
@@ -99,9 +101,9 @@ Relation：1,825
 POC 阶段使用以下独立目录，避免在验证完成前影响当时的北京缓存：
 
 ```text
-PBF：E:\camera-safe-routing-data\work\osm\jingjinji-smart-20260729-25564ac2ef03.osm.pbf
+PBF：F:\CodexProjects\routing-plan\workspace\work\osm\jingjinji-smart-20260729-25564ac2ef03.osm.pbf
 图缓存：E:\camera-safe-routing-data\graph-cache\jingjinji-2a1bcebc1658
-快照：E:\camera-safe-routing-data\work\snapshots\jingjinji-2a1bcebc1658
+快照：F:\CodexProjects\routing-plan\workspace\work\snapshots\jingjinji-2a1bcebc1658
 端口：http://localhost:18081
 ```
 
