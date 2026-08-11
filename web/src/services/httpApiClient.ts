@@ -3,6 +3,7 @@ import {
   parseApiError,
   parseCameraPage,
   parseCameraSnapshotStatus,
+  parseControlledArea,
   parseHealthResponse,
   parseReadinessResponse,
   parseRouteResponse,
@@ -12,6 +13,7 @@ import type {
   BoundingBox,
   CameraPage,
   CameraSnapshotStatus,
+  ControlledArea,
   HealthResponse,
   ReadinessResponse,
   RouteRequest,
@@ -67,6 +69,10 @@ export class HttpApiClient implements ApiClient {
     return parseCameraSnapshotStatus(
       await this.request('/api/v1/camera-snapshots/current', { signal }),
     );
+  }
+
+  async getControlledArea(signal?: AbortSignal): Promise<ControlledArea> {
+    return parseControlledArea(await this.request('/api/v1/controlled-area', { signal }));
   }
 
   async health(signal?: AbortSignal): Promise<HealthResponse> {

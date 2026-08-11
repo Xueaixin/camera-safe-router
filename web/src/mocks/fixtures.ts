@@ -2,6 +2,7 @@ import type {
   ApiErrorCode,
   CameraPage,
   CameraSnapshotStatus,
+  ControlledArea,
   RouteRequest,
   RouteResponse,
 } from '@/types/api';
@@ -79,9 +80,30 @@ export const MOCK_SNAPSHOT: CameraSnapshotStatus = {
   status: 'READY',
   snapshotVersion: 'fixture-camera-v1',
   blockedEdgeVersion: 'fixture-blocked-v1',
-  cameraCount: 6797,
+  cameraCount: 5597,
+  sourceCameraCount: 5707,
+  outsideControlAreaCameraCount: 110,
+  cameraOutsideMarginMeters: 50,
+  controlBoundaryVersion: 'fixture-controlled-area-v1',
   safetyRadiusMeters: 30,
   loadedAt: '2026-07-30T00:00:00Z',
+};
+
+export const MOCK_CONTROLLED_AREA: ControlledArea = {
+  boundaryVersion: 'fixture-controlled-area-v1',
+  coordinateSystem: 'GCJ02',
+  geometry: {
+    type: 'MultiPolygon',
+    coordinates: [[[
+      { lng: 116.29, lat: 39.84 },
+      { lng: 116.53, lat: 39.84 },
+      { lng: 116.53, lat: 40.02 },
+      { lng: 116.29, lat: 40.02 },
+      { lng: 116.29, lat: 39.84 },
+    ]]],
+  },
+  approvedForProduction: false,
+  cameraOutsideMarginMeters: 50,
 };
 
 export function buildMockRoute(
@@ -173,6 +195,7 @@ export function buildMockCrossBoundaryRoute(
       gcj02: handoff,
       boundaryClearanceMeters: 260,
       roadName: '立汤路辅路',
+      type: 'ORDINARY_ROAD',
     },
     externalHandoff: {
       wgs84: { lng: handoff.lng - 0.0065, lat: handoff.lat - 0.0015 },

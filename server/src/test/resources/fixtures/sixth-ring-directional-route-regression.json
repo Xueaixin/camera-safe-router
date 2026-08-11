@@ -92,8 +92,6 @@
       "minDistanceMeters": 100000,
       "maxDistanceMeters": 230000,
       "maxReferenceJoinStepMeters": 150,
-      "requiresNavigationHandoff": true,
-      "navigationHandoffSegment": "REFERENCE",
       "reviewExpectation": "朱辛庄至武清；普通跨线桥通行口不得按同坐标跳到桥下六环高速"
     },
     {
@@ -106,8 +104,8 @@
       "maxDistanceMeters": 230000,
       "maxReferenceJoinStepMeters": 150,
       "requiresNavigationHandoff": true,
-      "navigationHandoffSegment": "SAFE",
-      "reviewExpectation": "武清至朱辛庄；沿六环高速入环后必须在驶入普通道路的位置生成导航交接点"
+      "navigationHandoffType": "ORDINARY_ROAD",
+      "reviewExpectation": "武清至朱辛庄；按最后一次有效入界点向界外寻找普通道路交接点，仅在普通道路点不可用时才回退到界外高速主路"
     }
   ],
   "internalRoutes": [
@@ -135,7 +133,7 @@
       "start": {"lng": 116.3970, "lat": 39.9080},
       "end": {"lng": 116.2009058, "lat": 39.9002488},
       "minDistanceMeters": 5000,
-      "maxDistanceMeters": 70000,
+      "maxDistanceMeters": 130000,
       "reviewExpectation": "西侧环内合规距离路线"
     },
     {
@@ -144,7 +142,7 @@
       "start": {"lng": 116.3970, "lat": 39.9080},
       "end": {"lng": 116.3996417, "lat": 40.1024546},
       "minDistanceMeters": 5000,
-      "maxDistanceMeters": 70000,
+      "maxDistanceMeters": 90000,
       "reviewExpectation": "北侧环内合规距离路线"
     }
   ]

@@ -17,6 +17,7 @@ public record PlannedRoute(
         double distanceMeters,
         long durationMillis,
         List<Wgs84Coordinate> geometry,
+        List<RouteTracePoint> trace,
         long searchEdgeChecks,
         long virtualEdgeChecks,
         long blockedRejections) {
@@ -27,6 +28,7 @@ public record PlannedRoute(
             throw new IllegalArgumentException("boundary version is required");
         }
         geometry = List.copyOf(geometry);
+        trace = List.copyOf(trace);
         if (!Double.isFinite(distanceMeters) || distanceMeters < 0 || durationMillis < 0) {
             throw new IllegalArgumentException("route distance and duration must be non-negative");
         }
@@ -41,6 +43,27 @@ public record PlannedRoute(
                 safeSegment,
                 referenceSegment,
                 externalHandoff);
+    }
+
+    public PlannedRoute(
+            RoutePlanningMode planningMode,
+            String boundaryVersion,
+            SixthRingPortal.Direction boundaryDirection,
+            SixthRingPortal boundaryCrossing,
+            NavigationHandoffPoint navigationHandoff,
+            RouteLeg safeSegment,
+            RouteLeg referenceSegment,
+            ExternalHandoffPoint externalHandoff,
+            double distanceMeters,
+            long durationMillis,
+            List<Wgs84Coordinate> geometry,
+            long searchEdgeChecks,
+            long virtualEdgeChecks,
+            long blockedRejections) {
+        this(planningMode, boundaryVersion, boundaryDirection, boundaryCrossing,
+                navigationHandoff, safeSegment, referenceSegment, externalHandoff,
+                distanceMeters, durationMillis, geometry, List.of(), searchEdgeChecks,
+                virtualEdgeChecks, blockedRejections);
     }
 
     private static void validateMode(
@@ -87,7 +110,8 @@ public record PlannedRoute(
         if (direction != expectedDirection || crossing == null
                 || crossing.direction() != expectedDirection
                 || crossing.boundaryRole() != expectedRole
-                || safe == null || reference == null || externalHandoff == null) {
+                || safe == null || reference == null
+                || (navigationHandoff == null) != (externalHandoff == null)) {
             throw new IllegalArgumentException("invalid cross-boundary route shape");
         }
         if (navigationHandoff != null) {

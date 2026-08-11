@@ -16,7 +16,6 @@ import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.Point;
-import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.index.strtree.STRtree;
 import org.locationtech.jts.linearref.LengthIndexedLine;
 
@@ -59,9 +58,9 @@ public final class SixthRingPortalTopologyBuilder {
         Objects.requireNonNull(boundary, "boundary");
 
         SixthRingPortalTopology.Scan outbound = scanBoundary(
-                graph, carAccess, weighting, boundary.outerPolygon(), OUTBOUND, OUTER_EXIT);
+                graph, carAccess, weighting, boundary.controlledArea(), OUTBOUND, OUTER_EXIT);
         SixthRingPortalTopology.Scan inbound = scanBoundary(
-                graph, carAccess, weighting, boundary.innerPolygon(), INBOUND, INNER_ENTRY);
+                graph, carAccess, weighting, boundary.controlledArea(), INBOUND, INNER_ENTRY);
         return new SixthRingPortalTopology(boundary.version(), outbound, inbound);
     }
 
@@ -69,7 +68,7 @@ public final class SixthRingPortalTopologyBuilder {
             BaseGraph graph,
             BooleanEncodedValue carAccess,
             Weighting weighting,
-            Polygon boundary,
+            Geometry boundary,
             SixthRingPortal.Direction direction,
             SixthRingPortal.BoundaryRole boundaryRole) {
         STRtree boundarySegments = boundarySegmentIndex(boundary);
@@ -152,7 +151,7 @@ public final class SixthRingPortalTopologyBuilder {
             int edgeKey,
             String roadName,
             LineString traversal,
-            Polygon boundary,
+            Geometry boundary,
             SixthRingPortal.Direction direction,
             SixthRingPortal.BoundaryRole boundaryRole) {
         Side source = direction == OUTBOUND ? Side.INSIDE : Side.OUTSIDE;
@@ -198,7 +197,7 @@ public final class SixthRingPortalTopologyBuilder {
             BaseGraph graph,
             BooleanEncodedValue carAccess,
             Weighting weighting,
-            Polygon boundary,
+            Geometry boundary,
             SixthRingPortal.Direction direction,
             SixthRingPortal.BoundaryRole boundaryRole,
             Set<Integer> boundaryNodes,
@@ -297,7 +296,7 @@ public final class SixthRingPortalTopologyBuilder {
         return Double.isFinite(turnWeight) && turnWeight >= 0;
     }
 
-    private static DirectedEdgeSide classifyFromBase(PointList points, Polygon boundary) {
+    private static DirectedEdgeSide classifyFromBase(PointList points, Geometry boundary) {
         if (points.size() < 2) {
             return new DirectedEdgeSide(null, 0);
         }
@@ -311,7 +310,7 @@ public final class SixthRingPortalTopologyBuilder {
         return new DirectedEdgeSide(null, 0);
     }
 
-    private static List<SideInterval> sideIntervals(LineString line, Polygon boundary) {
+    private static List<SideInterval> sideIntervals(LineString line, Geometry boundary) {
         LengthIndexedLine indexed = new LengthIndexedLine(line);
         double start = indexed.getStartIndex();
         double end = indexed.getEndIndex();
@@ -343,7 +342,7 @@ public final class SixthRingPortalTopologyBuilder {
         return List.copyOf(intervals);
     }
 
-    private static Side classify(Point point, Polygon boundary) {
+    private static Side classify(Point point, Geometry boundary) {
         if (boundary.getBoundary().isWithinDistance(point, BOUNDARY_TOLERANCE_DEGREES)) {
             return Side.BOUNDARY;
         }
@@ -352,7 +351,7 @@ public final class SixthRingPortalTopologyBuilder {
 
     private static void collectBoundaryEndpointNodes(
             BaseGraph graph,
-            Polygon boundary,
+            Geometry boundary,
             EdgeIteratorState edge,
             Set<Integer> boundaryNodes) {
         if (isBoundaryNode(graph, boundary, edge.getBaseNode())) {
@@ -363,7 +362,7 @@ public final class SixthRingPortalTopologyBuilder {
         }
     }
 
-    private static boolean isBoundaryNode(BaseGraph graph, Polygon boundary, int node) {
+    private static boolean isBoundaryNode(BaseGraph graph, Geometry boundary, int node) {
         Point point = GEOMETRY_FACTORY.createPoint(new Coordinate(
                 graph.getNodeAccess().getLon(node),
                 graph.getNodeAccess().getLat(node)));
@@ -420,11 +419,18 @@ public final class SixthRingPortalTopologyBuilder {
         return new LengthIndexedLine(line).extractPoint(index);
     }
 
-    private static STRtree boundarySegmentIndex(Polygon boundary) {
+    private static STRtree boundarySegmentIndex(Geometry boundary) {
         STRtree index = new STRtree();
-        Coordinate[] coordinates = boundary.getExteriorRing().getCoordinates();
-        for (int position = 1; position < coordinates.length; position++) {
-            index.insert(new Envelope(coordinates[position - 1], coordinates[position]), position);
+        Geometry boundaryLines = boundary.getBoundary();
+        int segmentId = 0;
+        for (int geometryIndex = 0;
+                geometryIndex < boundaryLines.getNumGeometries(); geometryIndex++) {
+            Coordinate[] coordinates = boundaryLines.getGeometryN(geometryIndex).getCoordinates();
+            for (int position = 1; position < coordinates.length; position++) {
+                index.insert(
+                        new Envelope(coordinates[position - 1], coordinates[position]),
+                        segmentId++);
+            }
         }
         index.build();
         return index;

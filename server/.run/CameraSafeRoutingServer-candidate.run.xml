@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="CameraSafeRoutingServer (候选数据)" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="cn.camera.safe.CameraSafeRoutingApplication" />
+    <module name="camera-safe-routing-server" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <!-- 候选模式：激活 candidate profile，路径由 application-candidate.yml 相对仓库布局推导，跨设备无需修改 -->
+    <envs>
+      <env name="SPRING_PROFILES_ACTIVE" value="candidate" />
+    </envs>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

@@ -19,9 +19,9 @@ class RuntimePathConfigurationTest {
         assertThat(environment.getRequiredProperty("app.routing.graph-cache-path"))
                 .isEqualTo("/camera-safe-routing-data/graph-cache/jingjinji");
         assertThat(environment.getRequiredProperty("app.routing.candidate-graph-cache-path"))
-                .isEqualTo("/camera-safe-routing-data/graph-cache/jingjinji-compliant-distance-v1");
+                .isEqualTo("/camera-safe-routing-data/graph-cache/jingjinji-compliant-time-v2");
         assertThat(environment.getRequiredProperty("app.routing.profile-mode"))
-                .isEqualTo("COMPLIANT_DISTANCE_V1");
+                .isEqualTo("COMPLIANT_TIME_V2");
         assertThat(environment.getRequiredProperty("app.sixth-ring.boundary-path"))
                 .isEqualTo("/camera-safe-routing-data/boundaries/sixth-ring-boundary.geojson");
         assertThat(environment.getRequiredProperty("app.cameras.json-path"))
@@ -56,7 +56,7 @@ class RuntimePathConfigurationTest {
         assertThat(environment.getRequiredProperty("app.routing.graph-cache-path"))
                 .isEqualTo("R:/routing-data/graph-cache/jingjinji");
         assertThat(environment.getRequiredProperty("app.routing.candidate-graph-cache-path"))
-                .isEqualTo("R:/routing-data/graph-cache/jingjinji-compliant-distance-v1");
+                .isEqualTo("R:/routing-data/graph-cache/jingjinji-compliant-time-v2");
         assertThat(environment.getRequiredProperty("app.sixth-ring.boundary-path"))
                 .isEqualTo("R:/routing-data/boundaries/sixth-ring-boundary.geojson");
         assertThat(environment.getRequiredProperty("app.cameras.json-path"))

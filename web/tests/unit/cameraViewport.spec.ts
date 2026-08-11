@@ -37,6 +37,8 @@ class MapStub implements MapAdapter {
   fitRoute() {}
   setCameras() {}
   clearCameras() {}
+  setControlledArea() {}
+  clearControlledArea() {}
   setCurrentLocation(_location: DisplayLocation | null) {}
   centerOn() {}
   getViewport() {
@@ -57,6 +59,9 @@ function apiWithList(listCameras: ApiClient['listCameras']): ApiClient {
       throw new Error('unused');
     },
     getCurrentCameraSnapshot: async () => {
+      throw new Error('unused');
+    },
+    getControlledArea: async () => {
       throw new Error('unused');
     },
     health: async () => ({ status: 'UP' }),

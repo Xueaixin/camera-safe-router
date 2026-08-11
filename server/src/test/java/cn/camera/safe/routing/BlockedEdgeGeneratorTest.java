@@ -10,6 +10,7 @@ import com.graphhopper.util.GHUtility;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.BitSet;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +41,34 @@ class BlockedEdgeGeneratorTest {
         assertThat(result.snapshot().isBlockedEdgeKey(GHUtility.reverseEdgeKey(northSouth.getEdgeKey()))).isTrue();
         assertThat(result.snapshot().isBlockedEdgeKey(farAway.getEdgeKey())).isFalse();
         assertThat(result.snapshot().blockedEdgeCount()).isEqualTo(2);
+    }
+
+    @Test
+    void matchesButDoesNotBlockHighwayMainlineEdges() {
+        BaseGraph graph = new BaseGraph.Builder(2).create();
+        graph.getNodeAccess().setNode(0, 39.9, 116.0);
+        graph.getNodeAccess().setNode(1, 39.9, 116.01);
+        EdgeIteratorState mainline = graph.edge(0, 1).setDistance(850);
+        RoadEdgeIndex roadIndex = RoadEdgeIndex.build(graph, edge -> true, "graph-test");
+        BitSet mainlineEdges = new BitSet();
+        mainlineEdges.set(mainline.getEdge());
+        RoadClassificationIndex classification = new RoadClassificationIndex(
+                mainlineEdges, new BitSet(), new BitSet(), "classification-v1");
+
+        BlockedEdgeBuildResult result = new BlockedEdgeGenerator().generate(
+                snapshot(new Wgs84Coordinate(116.005, 39.9)),
+                snapshot(new Wgs84Coordinate(116.005, 39.9)).cameras(),
+                roadIndex,
+                30,
+                "boundary-v1",
+                50,
+                classification);
+
+        assertThat(result.matchedCameraCount()).isEqualTo(1);
+        assertThat(result.highwayExemptCameraCount()).isEqualTo(1);
+        assertThat(result.unmatchedCameraIds()).isEmpty();
+        assertThat(result.snapshot().isBlockedEdgeKey(mainline.getEdgeKey())).isFalse();
+        assertThat(result.snapshot().blockedEdgeCount()).isZero();
     }
 
     private static CameraSnapshot snapshot(Wgs84Coordinate coordinate) {

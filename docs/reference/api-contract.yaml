@@ -1,15 +1,16 @@
 openapi: 3.0.3
 info:
   title: Camera Safe Routing API
-  version: 1.3.0
-  description: 京津冀摄像头点位避让、六环单调跨界路线和道路类型安全交接接口契约
-x-implementation-status: ROUTE_V1_3_IMPLEMENTED_REAL_DATA_REGRESSION_PENDING
+  version: 1.5.0
+  description: 京津冀适用摄像头硬避让、六环与通州并集边界、高速主路豁免、入界高速交接兜底和受控区地图接口契约
+x-implementation-status: ROUTE_V2_2_CANDIDATE_IMPLEMENTED_AUTOMATED_AND_REAL_DATA_REGRESSION_PASSED_BOUNDARY_APPROVAL_PENDING
 servers:
   - url: http://localhost:8080
     description: Local development
 tags:
   - name: Routes
   - name: Cameras
+  - name: ControlledArea
   - name: Operations
 paths:
   /api/v1/routes:
@@ -18,10 +19,11 @@ paths:
       operationId: planRoute
       summary: 规划一条避开当前摄像头快照的驾车路线
       description: |
-        服务端根据起终点与六环边界的关系自动选择规划模式，调用方不传入规划模式或通行口。
+        服务端根据起终点与受控区域并集边界的关系自动选择规划模式，调用方不传入规划模式或通行口。
         成功响应始终包含可直接绘制的完整参考几何；跨界路线同时返回选中的有向通行口、
-        可选的普通道路导航交接点、环内安全路段和独立的严格环外审计点。INTERNAL_SAFE 只按端点分类，不限制完整
-        路线必须留在六环内；跨界模式则使用方向相关的搜索期单调边界硬约束。
+        可选的严格界外导航交接点、受控侧安全路段和 POI 半径。入界普通道路点不可用时可返回界外高速主路点；
+        INTERNAL_SAFE 只按端点分类，不限制完整路线必须留在受控区域内；跨界模式按受控侧
+        Dmin + 1000 米分层选择，并用分区道路状态约束禁止释放后进入受控普通道路。
       requestBody:
         required: true
         content:
@@ -30,7 +32,7 @@ paths:
               $ref: '#/components/schemas/RouteRequest'
       responses:
         '200':
-          description: 已通过独立安全校验并包含六环规划语义的路线
+          description: 已通过独立安全校验并包含受控区域规划语义的路线
           content:
             application/json:
               schema:
@@ -44,7 +46,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiError'
         '422':
-          description: 起点或终点不在当前路网支持范围，或位于尚未冻结归类规则的六环边界带
+          description: 起点或终点不在当前路网支持范围，或落在受控区域边界线上而无法稳定分类
           content:
             application/json:
               schema:
@@ -57,7 +59,8 @@ paths:
       operationId: listCameras
       summary: 查询当前地图范围内的摄像头点位
       description: |
-        查询范围不设置固定经纬度跨度；服务根据当前快照中的实际命中数量保护响应规模。
+        只返回当前边界和界外安全边距内真正参与硬禁行的摄像头。查询范围不设置固定经纬度跨度；
+        服务根据当前快照中的实际命中数量保护响应规模。
         命中数量超过服务上限时返回 CAMERA_QUERY_RESULT_LIMIT_EXCEEDED，客户端应放大地图后重试。
       parameters:
         - name: minLng
@@ -96,6 +99,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/controlled-area:
+    get:
+      tags: [ControlledArea]
+      operationId: getControlledArea
+      summary: 获取用于地图展示和摄像头作用域判断的受控区
+      responses:
+        '200':
+          description: 后端已转换为 GCJ-02 的 MultiPolygon，保留多面和孔洞结构
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ControlledAreaResponse'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
   /api/v1/camera-snapshots/current:
@@ -262,8 +279,9 @@ components:
       description: |
         planningMode 是模式判别字段。INTERNAL_SAFE 时 safeSegment 非空；
         CROSS_BOUNDARY_OUTBOUND 和 CROSS_BOUNDARY_INBOUND 时 boundaryDirection、
-        boundaryCrossing、externalHandoff、safeSegment、referenceSegment 均非空；navigationHandoff
-        仅在边界附近能够证明存在普通道路交接点时非空。EXTERNAL_ONLY 时 safeSegment 为空且
+        boundaryCrossing、safeSegment、referenceSegment 均非空；navigationHandoff 与
+        externalHandoff 必须同时非空或同时为空。非空时两者坐标一致且严格位于受控区域外，
+        externalHandoff 额外提供动态 POI 搜索半径。EXTERNAL_ONLY 时 safeSegment 为空且
         referenceSegment 为完整参考路线。geometry 始终为完整参考几何。
       required:
         - routeId
@@ -292,7 +310,7 @@ components:
           $ref: '#/components/schemas/RoutePlanningMode'
         boundaryVersion:
           type: string
-          description: 本次内外分类和通行口提取使用的六环边界版本。
+          description: 本次内外分类和通行口提取使用的受控区域并集边界版本。
         boundaryDirection:
           type: string
           nullable: true
@@ -304,25 +322,25 @@ components:
           nullable: true
           allOf:
             - $ref: '#/components/schemas/BoundaryCrossing'
-          description: 仅跨界模式非空，表示最终选中的有向边界通行口；这是技术审计点，不是用户导航端点。
+          description: 仅跨界模式非空，表示最终路线与受控区域并集边界的物理交点；出界取最终 trace 最早一次有效的受控区到界外交点，入界取实际行驶方向最后一次有效的界外到受控区交点。这是技术审计点，不是内部控制释放点或用户导航端点。
         navigationHandoff:
           type: object
           nullable: true
           allOf:
             - $ref: '#/components/schemas/NavigationHandoff'
-          description: 跨界路线中可供用户设为起点或终点的普通道路交接点，也是用户可见地标解析与精确高德导航的坐标锚点。入环路线在边界处仍行驶于高速或连接匝道时，该点取驶离高速后安全段中的首个普通道路点，因此可以位于六环内侧；高速主线、连接匝道、隧道、轮渡或无法证明道路类型的点均不得返回。
+          description: 跨界路线中可供用户设为起点或终点的严格界外交接点，也是用户可见地标解析与精确高德导航的坐标锚点。普通道路点始终优先，只在最终路线的技术边界交点外侧 500 米轨迹范围内寻找，并排除高速、连接匝道、隧道、轮渡及无法证明道路类型的点；仅 CROSS_BOUNDARY_INBOUND 在普通道路点不可用时，允许回退到最终路线界外约 300 米、最远 500 米内的高速主路点。找不到可靠点时与 externalHandoff 同时为 null。
         externalHandoff:
           type: object
           nullable: true
           allOf:
             - $ref: '#/components/schemas/ExternalHandoff'
-          description: 仅跨界模式非空；与边界交点不同，是参考路线中严格位于外边界之外的审计与兼容字段。它可能因路线长时间沿边界带行驶而远离 navigationHandoff，不得作为用户可见地标或导航坐标。
+          description: 跨界模式下与 navigationHandoff 同时非空或同时为空；非空时两者使用同一严格界外坐标。该兼容字段提供边界净空和后端计算的动态 POI 搜索半径。
         safeSegment:
           type: object
           nullable: true
           allOf:
             - $ref: '#/components/schemas/RouteSegment'
-          description: 环内端点与 navigationHandoff 之间的受控合规路段；交接点为空时改为环内端点与技术边界点之间的路段。EXTERNAL_ONLY 时为空。
+          description: 受控区域内端点与 navigationHandoff 之间的合规路段；交接点为空时改为受控区域内端点与技术边界点之间的路段。EXTERNAL_ONLY 时为空。
         referenceSegment:
           type: object
           nullable: true
@@ -341,6 +359,7 @@ components:
           type: integer
           minimum: 0
           maximum: 0
+          description: 适用摄像头规则道路的冲突数。六环主路和六环外通州区域内的高速主路完全豁免摄像头；六环内其他高速主路永久禁行，普通道路和匝道继续适用摄像头规则。OSM access、单行线、道路关闭和转向限制始终生效；成功响应固定为 0。
         cameraSnapshotVersion:
           type: string
         blockedEdgeVersion:
@@ -366,7 +385,7 @@ components:
       enum: [OUTBOUND, INBOUND]
     BoundaryRole:
       type: string
-      description: OUTER_EXIT 用于出环，INNER_ENTRY 用于入环。
+      description: 兼容枚举名；OUTER_EXIT 表示出界，INNER_ENTRY 表示入界。
       enum: [OUTER_EXIT, INNER_ENTRY]
     BoundaryCrossing:
       type: object
@@ -409,12 +428,12 @@ components:
           type: number
           format: double
           minimum: 0
-          description: 该点到六环外边界的最短距离。
+          description: 该点到受控区域并集边界的最短距离；该点与 navigationHandoff 坐标一致并严格位于界外。
         poiSearchRadiusMeters:
           type: integer
           minimum: 0
           maximum: 200
-          description: 后端按边界净空扣除安全余量后给出的兼容搜索半径；大于 0 时整个搜索圆位于外边界之外。当前前端不再使用该字段解析用户可见地标。
+          description: 普通道路点按 min(200, floor(max(0, clearance - 25))) 返回；HIGHWAY 交接点固定为 0，前端不得搜索收费站或附近 POI。
     NavigationHandoff:
       type: object
       additionalProperties: false
@@ -423,6 +442,7 @@ components:
         - gcj02
         - boundaryClearanceMeters
         - roadName
+        - type
       properties:
         wgs84:
           $ref: '#/components/schemas/OutputCoordinate'
@@ -433,11 +453,57 @@ components:
           format: double
           exclusiveMinimum: true
           minimum: 0
-          description: 该普通道路点到六环外边界的最短距离；这是无符号净空，交接点位于边界内侧时仍为正数。
+          description: 该严格界外交接点到受控区域并集边界的最短距离；高速兜底不要求 250 米净空。
         roadName:
           type: string
           nullable: true
           description: GraphHopper 路网中的道路名称；无名称时为空。
+        type:
+          type: string
+          enum: [ORDINARY_ROAD, HIGHWAY]
+          description: HIGHWAY 只允许出现在 CROSS_BOUNDARY_INBOUND 的普通道路点兜底中。
+    ControlledAreaResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - boundaryVersion
+        - coordinateSystem
+        - geometry
+        - approvedForProduction
+        - cameraOutsideMarginMeters
+      properties:
+        boundaryVersion:
+          type: string
+        coordinateSystem:
+          type: string
+          enum: [GCJ02]
+        geometry:
+          $ref: '#/components/schemas/ControlledAreaGeometry'
+        approvedForProduction:
+          type: boolean
+        cameraOutsideMarginMeters:
+          type: number
+          format: double
+          minimum: 0
+    ControlledAreaGeometry:
+      type: object
+      additionalProperties: false
+      required: [type, coordinates]
+      properties:
+        type:
+          type: string
+          enum: [MultiPolygon]
+        coordinates:
+          type: array
+          minItems: 1
+          items:
+            type: array
+            minItems: 1
+            items:
+              type: array
+              minItems: 4
+              items:
+                $ref: '#/components/schemas/OutputCoordinate'
     RouteSegment:
       type: object
       additionalProperties: false
@@ -522,6 +588,10 @@ components:
         - snapshotVersion
         - blockedEdgeVersion
         - cameraCount
+        - sourceCameraCount
+        - outsideControlAreaCameraCount
+        - cameraOutsideMarginMeters
+        - controlBoundaryVersion
         - safetyRadiusMeters
         - loadedAt
       properties:
@@ -535,6 +605,21 @@ components:
         cameraCount:
           type: integer
           minimum: 0
+          description: 实际参与硬禁行并由摄像头查询接口展示的数量。
+        sourceCameraCount:
+          type: integer
+          minimum: 0
+          description: 通过旧 IsSixRingOut 源数据过滤后保留的总数。
+        outsideControlAreaCameraCount:
+          type: integer
+          minimum: 0
+          description: 距受控区边界超过 cameraOutsideMarginMeters、已在界外解禁的数量。
+        cameraOutsideMarginMeters:
+          type: number
+          format: double
+          minimum: 0
+        controlBoundaryVersion:
+          type: string
         safetyRadiusMeters:
           type: number
           format: double
@@ -562,6 +647,10 @@ components:
         - retainedRecordCount
         - excludedRecordCount
         - unrecognizedIsSixRingOutCount
+        - restrictedCameraCount
+        - outsideControlAreaCameraCount
+        - cameraOutsideMarginMeters
+        - controlBoundaryVersion
         - matchedCameraCount
         - unmatchedCameraCount
         - blockedEdgeCount
@@ -587,6 +676,18 @@ components:
         unrecognizedIsSixRingOutCount:
           type: integer
           minimum: 0
+        restrictedCameraCount:
+          type: integer
+          minimum: 0
+        outsideControlAreaCameraCount:
+          type: integer
+          minimum: 0
+        cameraOutsideMarginMeters:
+          type: number
+          format: double
+          minimum: 0
+        controlBoundaryVersion:
+          type: string
         matchedCameraCount:
           type: integer
           minimum: 0

@@ -7,7 +7,6 @@ import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LineString;
-import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.geom.prep.PreparedGeometry;
 import org.locationtech.jts.geom.prep.PreparedGeometryFactory;
 import org.locationtech.jts.linearref.LengthIndexedLine;
@@ -43,7 +42,7 @@ public final class BoundaryTraversalConstraint implements EdgeTraversalConstrain
     }
 
     public static BoundaryTraversalConstraint stayWithin(
-            Polygon polygon,
+            Geometry polygon,
             int baseEdgeCount) {
         Objects.requireNonNull(polygon, "polygon");
         return new BoundaryTraversalConstraint(
@@ -53,7 +52,7 @@ public final class BoundaryTraversalConstraint implements EdgeTraversalConstrain
     }
 
     public static BoundaryTraversalConstraint avoidInterior(
-            Polygon polygon,
+            Geometry polygon,
             int baseEdgeCount) {
         Objects.requireNonNull(polygon, "polygon");
         Geometry shrunken = polygon.buffer(-BOUNDARY_TOLERANCE_DEGREES);

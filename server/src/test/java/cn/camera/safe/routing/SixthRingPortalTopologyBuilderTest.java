@@ -139,8 +139,8 @@ class SixthRingPortalTopologyBuilderTest {
     void createsAnInboundPortalAtTheInnerBoundary() {
         GraphFixture fixture = graph();
         node(fixture.graph(), 0, 0.009, 0.005);
-        node(fixture.graph(), 1, 0.007, 0.005);
-        node(fixture.graph(), 2, 0.005, 0.005);
+        node(fixture.graph(), 1, 0.008, 0.005);
+        node(fixture.graph(), 2, 0.006, 0.005);
         edge(fixture, 0, 1, true, false);
         EdgeIteratorState entry = edge(fixture, 1, 2, true, false);
 
@@ -159,9 +159,7 @@ class SixthRingPortalTopologyBuilderTest {
     }
 
     private static SixthRingBoundary boundary() {
-        Polygon inner = square(0.003, 0.007);
-        Polygon outer = square(0.002, 0.008);
-        return new SixthRingBoundary(inner, outer, "test-boundary-v1");
+        return new SixthRingBoundary(square(0.002, 0.008), "test-boundary-v1");
     }
 
     private static Polygon square(double minimum, double maximum) {

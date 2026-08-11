@@ -23,6 +23,8 @@ describe('AmapMapAdapter place lookup', () => {
   let geocoderPositions: [number, number][];
   let poiDistance: string;
   let includeCloserHotel: boolean;
+  let polygonOptions: Record<string, unknown>[];
+  let detachedPolygons: number;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,6 +36,8 @@ describe('AmapMapAdapter place lookup', () => {
     geocoderPositions = [];
     poiDistance = '80';
     includeCloserHotel = false;
+    polygonOptions = [];
+    detachedPolygons = 0;
 
     class FakeMap {
       on(event: string, handler: (event?: unknown) => void) {
@@ -130,6 +134,15 @@ describe('AmapMapAdapter place lookup', () => {
       setMap() {}
     }
 
+    class FakePolygon {
+      constructor(options: Record<string, unknown>) {
+        polygonOptions.push(options);
+      }
+      setMap(map: unknown) {
+        if (map === null) detachedPolygons += 1;
+      }
+    }
+
     class FakeInfoWindow {
       constructor(options: Record<string, unknown>) {
         infoWindowContent = options.content as HTMLElement;
@@ -149,6 +162,7 @@ describe('AmapMapAdapter place lookup', () => {
       InfoWindow: FakeInfoWindow,
       AutoComplete: FakeAutoComplete,
       Geocoder: FakeGeocoder,
+      Polygon: FakePolygon,
     } as unknown as AmapNamespace);
   });
 
@@ -251,11 +265,12 @@ describe('AmapMapAdapter place lookup', () => {
         gcj02: { lng: 116.53, lat: 40.024 },
         boundaryClearanceMeters: 320,
         roadName: '立汤路辅路',
+        type: 'ORDINARY_ROAD',
       },
       externalHandoff: {
-        wgs84: { lng: 116.5285, lat: 40.0235 },
-        gcj02: { lng: 116.535, lat: 40.025 },
-        boundaryClearanceMeters: 260,
+        wgs84: { lng: 116.5235, lat: 40.0225 },
+        gcj02: { lng: 116.53, lat: 40.024 },
+        boundaryClearanceMeters: 320,
         poiSearchRadiusMeters: 200,
       },
       outerEndpoint: { lng: 117.21, lat: 39.136 },
@@ -285,8 +300,8 @@ describe('AmapMapAdapter place lookup', () => {
     expect(onHandoffSegmentSelect).toHaveBeenCalledOnce();
   });
 
-  it('ignores a POI outside the navigation-landmark radius and reverses inbound navigation', async () => {
-    poiDistance = '240';
+  it('uses the dynamic POI radius, ignores farther landmarks, and reverses inbound navigation', async () => {
+    poiDistance = '140';
     const adapter = new AmapMapAdapter('key', 'security-code');
     await adapter.initialize(document.createElement('div'), {
       onEndpointSelect,
@@ -305,16 +320,18 @@ describe('AmapMapAdapter place lookup', () => {
         gcj02: { lng: 116.53, lat: 40.024 },
         boundaryClearanceMeters: 320,
         roadName: '沙河路',
+        type: 'ORDINARY_ROAD',
       },
       externalHandoff: {
-        wgs84: { lng: 116.5285, lat: 40.0235 },
-        gcj02: { lng: 116.535, lat: 40.025 },
-        boundaryClearanceMeters: 260,
-        poiSearchRadiusMeters: 200,
+        wgs84: { lng: 116.5235, lat: 40.0225 },
+        gcj02: { lng: 116.53, lat: 40.024 },
+        boundaryClearanceMeters: 150,
+        poiSearchRadiusMeters: 125,
       },
       outerEndpoint: { lng: 117.21, lat: 39.136 },
     });
 
+    expect(geocoderOptions).toHaveBeenLastCalledWith({ extensions: 'all', radius: 125 });
     handoffClickHandler?.({});
     await vi.waitFor(() =>
       expect(infoWindowContent?.textContent).toContain('天津市河北区天津站附近'),
@@ -326,5 +343,79 @@ describe('AmapMapAdapter place lookup', () => {
     const navigationUrl = new URL(navigationLink?.href ?? '');
     expect(navigationUrl.searchParams.get('from')).toBe('117.21,39.136,环外行程起点');
     expect(navigationUrl.searchParams.get('to')).toBe('116.53,40.024,环内路线交接点');
+  });
+
+  it('uses the exact highway handoff without looking up a nearby POI', async () => {
+    const adapter = new AmapMapAdapter('key', 'security-code');
+    await adapter.initialize(document.createElement('div'), {
+      onEndpointSelect,
+      onHandoffSegmentSelect,
+    });
+    adapter.setHandoffMarker({
+      crossing: {
+        portalId: 'P0003',
+        direction: 'INBOUND',
+        boundaryRole: 'INNER_ENTRY',
+        wgs84: { lng: 116.353, lat: 40.1637 },
+        gcj02: { lng: 116.3592, lat: 40.1649 },
+      },
+      navigationHandoff: {
+        wgs84: { lng: 116.3498, lat: 40.1642 },
+        gcj02: { lng: 116.356, lat: 40.1654 },
+        boundaryClearanceMeters: 4,
+        roadName: '北六环高速',
+        type: 'HIGHWAY',
+      },
+      externalHandoff: {
+        wgs84: { lng: 116.3498, lat: 40.1642 },
+        gcj02: { lng: 116.356, lat: 40.1654 },
+        boundaryClearanceMeters: 4,
+        poiSearchRadiusMeters: 0,
+      },
+      outerEndpoint: { lng: 117.21, lat: 39.136 },
+    });
+
+    expect(geocoderOptions).not.toHaveBeenCalled();
+    handoffClickHandler?.({});
+    await vi.waitFor(() => expect(infoWindowContent?.textContent).toContain('北六环高速'));
+    expect(infoWindowPosition).toEqual([116.356, 40.1654]);
+  });
+
+  it('draws every controlled-area polygon below route overlays and clears them', async () => {
+    const adapter = new AmapMapAdapter('key', 'security-code');
+    await adapter.initialize(document.createElement('div'), {
+      onEndpointSelect,
+      onHandoffSegmentSelect,
+    });
+    adapter.setControlledArea({
+      boundaryVersion: 'boundary-v2',
+      coordinateSystem: 'GCJ02',
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
+          [[
+            { lng: 116.1, lat: 39.8 },
+            { lng: 116.6, lat: 39.8 },
+            { lng: 116.6, lat: 40.2 },
+            { lng: 116.1, lat: 40.2 },
+            { lng: 116.1, lat: 39.8 },
+          ]],
+          [[
+            { lng: 116.7, lat: 39.9 },
+            { lng: 116.8, lat: 39.9 },
+            { lng: 116.8, lat: 40.0 },
+            { lng: 116.7, lat: 40.0 },
+            { lng: 116.7, lat: 39.9 },
+          ]],
+        ],
+      },
+      approvedForProduction: false,
+      cameraOutsideMarginMeters: 50,
+    });
+
+    expect(polygonOptions).toHaveLength(2);
+    expect(polygonOptions[0]).toMatchObject({ zIndex: 10, fillOpacity: 0.09 });
+    adapter.clearControlledArea();
+    expect(detachedPolygons).toBe(2);
   });
 });

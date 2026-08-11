@@ -62,13 +62,20 @@ public final class RoutingSnapshotManager {
         current.set(candidate);
         lastFailure = null;
         LOGGER.info("路由快照发布完成 源摄像头数={} 保留摄像头数={} "
-                        + "六环外排除数={} 无法识别IsSixRingOut数={} 禁行边数={} 匹配数={} 未匹配数={}",
+                        + "旧六环外排除数={} 无法识别IsSixRingOut数={} 受控摄像头数={} "
+                        + "受控区外解禁数={} 边界版本={} 界外边距米={} 禁行边数={} "
+                        + "匹配数={} 仅命中高速豁免边数={} 未匹配数={}",
                 candidate.cameraSnapshot().sourceRecordCount(),
                 candidate.cameraSnapshot().retainedRecordCount(),
                 candidate.cameraSnapshot().outsideSixRingRecordCount(),
                 candidate.cameraSnapshot().unrecognizedSixRingOutRecordCount(),
+                candidate.restrictedCameraCount(),
+                candidate.outsideControlAreaCameraCount(),
+                candidate.controlBoundaryVersion(),
+                candidate.cameraOutsideMarginMeters(),
                 candidate.blockedEdges().blockedEdgeCount(),
                 candidate.matchedCameraCount(),
+                candidate.highwayExemptCameraCount(),
                 candidate.unmatchedCameraIds().size());
         try {
             store.prune();

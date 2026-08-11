@@ -8,6 +8,7 @@ import type { PlaceSuggestion } from '@/types/map';
 
 defineProps<{
   searchPlaces: (keyword: string, signal?: AbortSignal) => Promise<PlaceSuggestion[]>;
+  currentLocationStatus?: string | null;
 }>();
 
 const emit = defineEmits<{ useCurrent: [] }>();
@@ -31,6 +32,7 @@ function selectEnd(place: SelectedPlace) {
         kind="start"
         :place="routeStore.start"
         :search-places="searchPlaces"
+        :current-status="currentLocationStatus ?? null"
         allow-current
         @select="selectStart"
         @clear="routeStore.setStart(null)"

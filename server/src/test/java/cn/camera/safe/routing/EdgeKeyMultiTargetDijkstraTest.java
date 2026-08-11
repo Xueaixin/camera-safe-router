@@ -23,7 +23,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 class EdgeKeyMultiTargetDijkstraTest {
 
     @Test
-    void retainsOnlyPortalsWithinOneKilometerOfTheShortestInsideDistance() {
+    void choosesDistanceBeforeTravelTimeAndStillReportsTravelTime() {
+        BaseGraph graph = graph(3);
+        EdgeIteratorState shortButSlow = graph.edge(0, 1).setDistance(100);
+        EdgeIteratorState longButFast = graph.edge(0, 2).setDistance(1_000);
+
+        EdgeKeyMultiTargetDijkstra.SearchResult result = EdgeKeyMultiTargetDijkstra.search(
+                graph,
+                new TimeByDistanceWeighting(),
+                0,
+                List.of(
+                        portal("slow", shortButSlow, 1),
+                        portal("fast", longButFast, 1)),
+                FORWARD,
+                0,
+                100,
+                Duration.ofSeconds(1));
+
+        assertThat(result.minimumDistanceMeters()).isEqualTo(100);
+        assertThat(result.candidates()).containsOnlyKeys("slow");
+        assertThat(result.candidates().get("slow").travelTimeSeconds()).isEqualTo(100);
+    }
+
+    @Test
+    void retainsOnlyPortalsWithinTheConfiguredDistanceTier() {
         BaseGraph graph = graph(4);
         EdgeIteratorState shortest = graph.edge(0, 1).setDistance(100);
         EdgeIteratorState withinTolerance = graph.edge(0, 2).setDistance(1_099);
@@ -300,6 +323,13 @@ class EdgeKeyMultiTargetDijkstraTest {
         @Override
         public boolean hasTurnCosts() {
             return true;
+        }
+    }
+
+    private static final class TimeByDistanceWeighting extends DistanceWeighting {
+        @Override
+        public double calcEdgeWeight(EdgeIteratorState edgeState, boolean reverse) {
+            return edgeState.getDistance() >= 1_000 ? 10 : 100;
         }
     }
 }

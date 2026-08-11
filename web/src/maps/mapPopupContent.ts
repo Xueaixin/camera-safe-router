@@ -98,11 +98,16 @@ export function createNavigationHandoffPopup(
   content.dataset.testid = 'handoff-popup';
 
   const outbound = data.crossing.direction === 'OUTBOUND';
+  const highway = data.navigationHandoff.type === 'HIGHWAY';
   const title = document.createElement('strong');
   title.textContent = outbound ? '环内路线终点' : '环内路线起点';
-  const road = data.navigationHandoff.roadName || '普通道路交接点';
+  const road = data.navigationHandoff.roadName
+    || (highway ? '受控区外高速交接点' : '普通道路交接点');
   const roadLine = textLine(`交接道路：${road}`, 'handoff-popup__road');
-  const location = textLine('正在获取交接点附近地标', 'handoff-popup__location');
+  const location = textLine(
+    highway ? '正在确认高速交接位置' : '正在获取交接点附近地标',
+    'handoff-popup__location',
+  );
   const feedback = textLine('', 'handoff-popup__feedback');
   feedback.setAttribute('role', 'status');
 
@@ -133,7 +138,7 @@ export function createNavigationHandoffPopup(
   copyButton.type = 'button';
   copyButton.className = 'map-point-popup__action map-point-popup__action--copy';
   copyButton.dataset.testid = 'copy-handoff-landmark';
-  copyButton.textContent = '复制地标';
+  copyButton.textContent = highway ? '复制道路' : '复制地标';
   copyButton.disabled = true;
   copyButton.addEventListener('pointerdown', (event) => event.stopPropagation());
 
@@ -145,7 +150,7 @@ export function createNavigationHandoffPopup(
         return;
       }
       resolvedDescription = value;
-      location.textContent = `附近地标：${value}`;
+      location.textContent = highway ? `交接位置：${value}` : `附近地标：${value}`;
       copyButton.disabled = false;
     },
     () => {

@@ -8,12 +8,12 @@
 
 - 前端 Vue 页面、地图展示、浏览器定位、摄像头图层和手动重新规划已实现。
 - 后端 Spring Boot API、GraphHopper 搜索期硬禁边、JTS 独立安全校验和快照持久化已实现。
-- 默认安全半径为 30 米；任何成功路线都必须满足 `cameraConflictCount = 0`，不存在违规降级路线。
+- 默认摄像头道路匹配安全半径为 50 米；任何成功路线都必须满足 `cameraConflictCount = 0`，不存在违规降级路线。
 - 当前摄像头源为 6,803 条；生产加载器只排除 `IsSixRingOut` 语义为 `1` 的记录，缺失或非法值保留并计数。
-- 当前保留 5,707 个点，其中 30 米匹配 5,688 个、未匹配 19 个。
+- 当前保留 5,707 个点；并集受控区与界外 50 米作用域内有 5,600 个点，按 50 米匹配 5,585 个、未匹配 15 个，1 个仅命中允许高速主路。
 - 摄像头远程更新已支持后端内部定时执行和本机手动触发；默认关闭，确认数据源使用许可后通过环境变量开启。
 - 后端业务日志使用中文，同时输出到控制台和数据根目录的 `logs`，按日期和大小滚动归档。
-- 京津冀路网和 `COMPLIANT_DISTANCE_V1` 已成为后端默认：启用 OSM 转向限制、距离主导权重和受限道路端点例外。六环生产拓扑、多目标搜索、跨界单调硬约束和 OpenAPI 1.3 已接入正式路线接口；当前规划器的 10 条跨界与 4 条环内路线已通过真实图零冲突回归，候选边界、地图人工验收和 4 个保留位置仍未获生产批准。
+- 默认 profile 兼容名仍为 `COMPLIANT_TIME_V2`，V2.2 场景 3 已改为 `Dmin + 1000 米` 受控侧距离分层，并拆分六环主路、六环内其他高速和六环外通州高速的有向通行规则。合成测试、隔离缓存加载、道路分类审计和 14 条并集边界路线回归已通过；地图人工验收和边界生产批准仍未完成，现有运行边界和缓存尚未切换。
 - 当前仅承诺京津冀候选范围内的驾车和手动重新规划，不包含自动偏航重算和逐向导航。
 
 详细进度和未完成项见 [开发计划与当前进度](docs/plans/开发计划与当前进度.md)。
@@ -25,7 +25,7 @@ flowchart LR
     U["移动端或桌面浏览器"] --> W["Vue 3 + 高德 Web JS API"]
     W -->|"WGS84 / GCJ-02 显式坐标"| A["Spring Boot API"]
     P["jingjinji-latest.osm.pbf"] --> G["GraphHopper 路网与缓存"]
-    B["六环内外边界 GeoJSON"] --> T["有向通行口拓扑"]
+    B["六环内侧与通州并集边界 GeoJSON"] --> T["有向通行口拓扑"]
     G --> T
     C["摄像头 camera.json"] --> S["摄像头与禁行边快照"]
     T --> R["四模式路线规划与多目标搜索"]
@@ -72,8 +72,9 @@ Windows 默认使用后端启动所在盘根目录的 `camera-safe-routing-data`
 F:\camera-safe-routing-data\
 ├─ osm\jingjinji-latest.osm.pbf
 ├─ cameras\camera.json
-├─ boundaries\sixth-ring-boundary.geojson
-├─ graph-cache\jingjinji-compliant-distance-v1\
+├─ boundaries\sixth-ring-boundary.geojson   兼容文件名，内容为受控区并集边界
+├─ graph-cache\jingjinji-compliant-time-v2\
+├─ graph-cache\jingjinji-compliant-distance-v1\ 旧版距离优先缓存，可选保留
 ├─ graph-cache\jingjinji\             旧 profile 回退缓存，可选保留
 ├─ snapshots\
 ├─ downloads\cameras\
@@ -90,7 +91,8 @@ F:\CodexProjects\routing-plan\workspace\
 ├─ tools\
 ├─ work\osm\
 ├─ work\graph-cache-candidates\
-├─ work\sixth-ring\
+├─ work\controlled-area-v1\
+├─ work\sixth-ring\                  旧六环方案历史产物，可选保留
 ├─ reports\
 ├─ reviews\
 └─ archive\
@@ -116,7 +118,7 @@ ROUTING_DATA_ROOT=D:\camera-safe-routing-data
 | 数据 | 当前用途 | 来源 |
 |---|---|---|
 | 京津冀 OSM PBF | 当前路网，由中国源离线切分 | `osm/jingjinji-latest.osm.pbf` |
-| 六环边界 | G4501 关系生成的内外双环候选边界 | `boundaries/sixth-ring-boundary.geojson`；当前仍为未生产批准状态 |
+| 受控区域边界 | 六环主路内侧闭环与通州 `r2988902` 行政区的面并集 | 运行文件名暂兼容为 `boundaries/sixth-ring-boundary.geojson`；新候选仍未生产批准 |
 | 中国 OSM PBF | 京津冀切分和后续月更源 | [china-latest.osm.pbf](http://download.openstreetmap.fr/extracts/asia/china-latest.osm.pbf) |
 | 摄像头点位 | 禁行点快照 | `POST https://www.jjz365.cn/CameraData/GetAllRing`，正式文件名为 `camera.json` |
 
@@ -167,9 +169,9 @@ $env:MAMBA_ROOT_PREFIX = Join-Path $workspaceRoot 'tools\micromamba-root'
 
 1. 将已验证的京津冀 PBF 放到数据根目录的 `osm/jingjinji-latest.osm.pbf`。
 2. 将摄像头 JSON 放到 `cameras/camera.json`。
-3. 将当前六环边界放到 `boundaries/sixth-ring-boundary.geojson`；服务会校验其中的来源 PBF SHA-256。
+3. 将当前受控区域并集边界放到 `boundaries/sixth-ring-boundary.geojson`；文件名为兼容保留，服务会校验其中的来源 PBF SHA-256、schema 和批准状态。
 4. IDEA 打开 `server/pom.xml`，Project SDK、Maven Runner JRE 均选择 JDK 21。
-5. 启动类为 `cn.camera.safe.CameraSafeRoutingApplication`。已有 `graph-cache/jingjinji-compliant-distance-v1` 时直接 Debug 即可，不需要设置路网环境变量；建议 VM options 使用 `-Xms1g -Xmx2g`。
+5. 启动类为 `cn.camera.safe.CameraSafeRoutingApplication`。已有与当前 PBF 和导入配置匹配的 `graph-cache/jingjinji-compliant-time-v2` 时可直接 Debug；建议 VM options 使用 `-Xms1g -Xmx2g`。
 
 也可以从 PowerShell 启动：
 
@@ -179,7 +181,7 @@ mvn test
 mvn spring-boot:run
 ```
 
-首次启动会解析 PBF 并生成 `jingjinji-compliant-distance-v1` 图缓存；后续启动直接加载缓存。PBF 内容或 profile/import 配置变化时不得继续复用旧缓存，服务会通过源文件与路由配置两份 SHA-256 元数据拒绝不一致组合。临时回退旧 profile 时可显式设置 `ROUTING_PROFILE_MODE=CURRENT`，它只会读取 `graph-cache/jingjinji`。
+首次启动会解析 PBF 并生成 `jingjinji-compliant-time-v2` 图缓存；后续启动直接加载缓存。该缓存新增 `osm_way_id` 和六环主路身份编码，不能复用 `COMPLIANT_DISTANCE_V1` 缓存。PBF 内容或 profile/import 配置变化时，服务会通过源文件与路由配置两份 SHA-256 元数据拒绝不一致组合。回退旧 profile 必须同时显式配置对应旧缓存目录，不能让不同 profile 共用目录。
 
 业务日志默认写入数据根目录的 `logs/camera-safe-routing-server.log`，归档文件位于 `logs/archive`。完整滚动和保留配置见 [运行配置与数据目录](docs/guides/运行配置与数据目录.md)。
 
@@ -290,7 +292,7 @@ npm run build
 
 唯一机器可读契约为 [api-contract.yaml](docs/reference/api-contract.yaml)。当前接口：
 
-路线响应已经实现 OpenAPI 1.3：服务端自动判定四种规划模式。跨界路线分别返回用于技术审计的 `boundaryCrossing`、可证明位于普通道路上时才返回的 `navigationHandoff`、兼容保留的严格环外审计点 `externalHandoff`、分段路线和完整 `geometry`。前端默认保留完整路线，仅在 `navigationHandoff` 非空时标点并提供“设为起点/终点”；弹窗围绕该导航交接点解析 200 米内的交通地标，并提供基于 GCJ-02 精确坐标的高德导航。当前默认边界仍为开发候选状态，真实高德和地图人工验收尚未完成，不能据此声明已经满足生产发布条件。
+路线响应已经实现 OpenAPI 1.5：服务端按六环内侧区域与通州行政区的并集边界自动判定四种规划模式。摄像头仅在受控区、边界及界外 50 米安全边距内参与硬禁行；跨界路线返回技术审计点 `boundaryCrossing`、可选的严格界外 `navigationHandoff`、同坐标 `externalHandoff`、分段路线和完整 `geometry`。入界普通道路点不可用时可在最终路线的界外高速主路上设置约 300 米交接点，该类型直接使用精确 GCJ-02 坐标导航且不查询附近收费站 POI。前端默认绘制可关闭的受控区遮罩并保留完整路线。新边界与 V2 缓存尚未完成人工批准，不能据此声明已经满足生产发布条件。
 
 | 方法 | 路径 | 说明 |
 |---|---|---|

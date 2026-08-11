@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Crosshair, EyeOff, Layers3, LocateFixed } from '@lucide/vue';
+import { Crosshair, EyeOff, LandPlot, Layers3, LocateFixed } from '@lucide/vue';
 
 import { useLocationStore } from '@/stores/locationStore';
 import { useMapStore } from '@/stores/mapStore';
@@ -58,6 +58,19 @@ function handleLocation() {
       <span v-if="mapStore.camerasVisible" class="map-tool-button__count">
         {{ mapStore.visibleCameras.length }}
       </span>
+    </button>
+
+    <button
+      class="map-tool-button"
+      type="button"
+      :aria-label="mapStore.controlledAreaVisible ? '隐藏受控区图层' : '显示受控区图层'"
+      :title="mapStore.controlledAreaVisible ? '隐藏受控区图层' : '显示受控区图层'"
+      :aria-pressed="mapStore.controlledAreaVisible"
+      data-testid="controlled-area-toggle"
+      @click="mapStore.toggleControlledArea"
+    >
+      <LandPlot v-if="mapStore.controlledAreaVisible" :size="20" aria-hidden="true" />
+      <EyeOff v-else :size="20" aria-hidden="true" />
     </button>
   </div>
 </template>

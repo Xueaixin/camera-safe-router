@@ -45,7 +45,11 @@ public final class CameraController {
                 "READY",
                 snapshot.cameraSnapshot().version(),
                 snapshot.blockedEdges().blockedEdgeVersion(),
+                snapshot.restrictedCameraCount(),
                 snapshot.cameraSnapshot().cameras().size(),
+                snapshot.outsideControlAreaCameraCount(),
+                snapshot.cameraOutsideMarginMeters(),
+                snapshot.controlBoundaryVersion(),
                 snapshot.safetyRadiusMeters(),
                 snapshot.cameraSnapshot().loadedAt());
     }

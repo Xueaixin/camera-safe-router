@@ -74,10 +74,17 @@ public record RouteResponse(
         if (direction != expectedDirection || crossing == null
                 || crossing.direction() != expectedDirection
                 || crossing.boundaryRole() != expectedRole
-                || externalHandoff == null || safe == null || reference == null) {
+                || safe == null || reference == null
+                || (navigationHandoff == null) != (externalHandoff == null)) {
             throw new IllegalArgumentException("invalid cross-boundary response shape");
         }
         if (navigationHandoff != null) {
+            if (navigationHandoff.type() == NavigationHandoffType.HIGHWAY
+                    && (expectedDirection != BoundaryDirection.INBOUND
+                            || externalHandoff.poiSearchRadiusMeters() != 0)) {
+                throw new IllegalArgumentException(
+                        "highway handoff is only valid inbound with POI search disabled");
+            }
             OutputCoordinate safeJoin = expectedDirection == BoundaryDirection.OUTBOUND
                     ? safe.geometry().getLast()
                     : safe.geometry().getFirst();

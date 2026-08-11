@@ -40,7 +40,7 @@ final class PortalAnchoredRouteFinder {
 
     static PortalAnchoredRoute route(
             HardAvoidingGraphHopper hopper,
-            SixthRingPortal portal,
+            ControlReleasePoint portal,
             Wgs84Coordinate externalEndpoint,
             RoutingSnapshot snapshot,
             EdgeTraversalConstraint traversalConstraint,
@@ -58,8 +58,8 @@ final class PortalAnchoredRouteFinder {
                 .getEnumEncodedValue(RoadEnvironment.KEY, RoadEnvironment.class);
         EdgeFilter routable = edge -> edge.get(carAccess) || edge.getReverse(carAccess);
         Snap portalSnap = hopper.getLocationIndex().findClosest(
-                portal.crossing().lat(),
-                portal.crossing().lng(),
+                portal.coordinate().lat(),
+                portal.coordinate().lng(),
                 edge -> edge.getEdge() == portal.edgeId() && routable.accept(edge));
         Snap endpointSnap = hopper.getLocationIndex().findClosest(
                 externalEndpoint.lat(), externalEndpoint.lng(), routable);
@@ -123,7 +123,7 @@ final class PortalAnchoredRouteFinder {
         rejectBlockedEdges(edges, snapshot.blockedEdges(), baseGraph.getEdges());
 
         GeometryTrace geometryTrace = geometryTrace(
-                edges, roadClass, roadClassLink, roadEnvironment);
+                edges, roadClass, roadClassLink, roadEnvironment, baseGraph.getEdges());
         List<Wgs84Coordinate> geometry = geometryTrace.geometry();
         if (geometry.size() < 2) {
             throw new RoutingEngineException(
@@ -135,6 +135,7 @@ final class PortalAnchoredRouteFinder {
                         path.getDistance(),
                         path.getTime(),
                         geometry,
+                        geometryTrace.trace(),
                         audit.edgeChecks(),
                         audit.virtualEdgeChecks(),
                         audit.blockedRejections()),
@@ -145,7 +146,8 @@ final class PortalAnchoredRouteFinder {
             List<EdgeIteratorState> edges,
             EnumEncodedValue<RoadClass> roadClass,
             BooleanEncodedValue roadClassLink,
-            EnumEncodedValue<RoadEnvironment> roadEnvironment) {
+            EnumEncodedValue<RoadEnvironment> roadEnvironment,
+            int baseEdgeCount) {
         List<Wgs84Coordinate> geometry = new ArrayList<>();
         List<RouteTracePoint> trace = new ArrayList<>();
         for (EdgeIteratorState edge : edges) {
@@ -166,7 +168,8 @@ final class PortalAnchoredRouteFinder {
                         edge.getName(),
                         edge.get(roadClass),
                         edge.get(roadClassLink),
-                        edge.get(roadEnvironment)));
+                        edge.get(roadEnvironment),
+                        OriginalEdgeKey.resolve(edge, baseEdgeCount)));
             }
         }
         return new GeometryTrace(List.copyOf(geometry), List.copyOf(trace));
@@ -174,7 +177,7 @@ final class PortalAnchoredRouteFinder {
 
     private static void validatePortalConnection(
             List<EdgeIteratorState> edges,
-            SixthRingPortal portal,
+            ControlReleasePoint portal,
             boolean outbound,
             boolean portalRemainderExists,
             BaseGraph baseGraph,
@@ -206,7 +209,7 @@ final class PortalAnchoredRouteFinder {
     private static int forcedPortalEdge(
             QueryGraph queryGraph,
             Snap portalSnap,
-            SixthRingPortal portal,
+            ControlReleasePoint portal,
             boolean outbound) {
         int expectedOutgoingKey = outbound
                 ? portal.edgeKey()

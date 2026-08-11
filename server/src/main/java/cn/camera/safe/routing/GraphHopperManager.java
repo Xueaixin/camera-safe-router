@@ -1,6 +1,7 @@
 package cn.camera.safe.routing;
 
 import cn.camera.safe.config.AppProperties;
+import cn.camera.safe.config.RoutingProfileMode;
 import cn.camera.safe.coordinate.Wgs84Coordinate;
 import com.graphhopper.routing.ev.BooleanEncodedValue;
 import jakarta.annotation.PreDestroy;
@@ -29,6 +30,8 @@ public final class GraphHopperManager {
     private volatile RoadEdgeIndex roadEdgeIndex;
     private volatile String graphFingerprint;
     private volatile String sourcePbfSha256;
+    private volatile Path sourcePbfPath;
+    private volatile RoutingProfileMode routingProfileMode;
 
     public GraphHopperManager(AppProperties properties) {
         this.properties = properties;
@@ -92,6 +95,8 @@ public final class GraphHopperManager {
             this.hopper = candidate;
             this.graphFingerprint = "sha256:" + fingerprint;
             this.sourcePbfSha256 = pbfHash;
+            this.sourcePbfPath = pbf;
+            this.routingProfileMode = graphConfiguration.mode();
             this.roadEdgeIndex = newRoadIndex;
             this.failureReason = null;
             state.set(GraphState.READY);
@@ -177,6 +182,22 @@ public final class GraphHopperManager {
         return sourcePbfSha256;
     }
 
+    public Path requireSourcePbfPath() {
+        Path value = sourcePbfPath;
+        if (!isReady() || value == null || !Files.isRegularFile(value)) {
+            throw new IllegalStateException("收费站走廊识别要求配置的源 PBF 文件存在");
+        }
+        return value;
+    }
+
+    public RoutingProfileMode requireRoutingProfileMode() {
+        RoutingProfileMode value = routingProfileMode;
+        if (!isReady() || value == null) {
+            throw new IllegalStateException("路由模式尚未就绪");
+        }
+        return value;
+    }
+
     static void verifyConfigurationHash(
             Path cache,
             RoutingGraphConfiguration graphConfiguration) throws IOException {
@@ -221,6 +242,7 @@ public final class GraphHopperManager {
         hopper = null;
         roadEdgeIndex = null;
         sourcePbfSha256 = null;
+        routingProfileMode = null;
         if (value != null) {
             value.close();
         }

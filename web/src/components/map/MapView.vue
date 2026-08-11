@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { AlertTriangle, RefreshCw } from '@lucide/vue';
 
 import CameraLayer from './CameraLayer.vue';
+import ControlledAreaLayer from './ControlledAreaLayer.vue';
 import CurrentLocationLayer from './CurrentLocationLayer.vue';
 import RouteLayer from './RouteLayer.vue';
 import { resetAmapLoader } from '@/maps/amapLoader';
@@ -110,6 +111,7 @@ onBeforeUnmount(() => map.value?.destroy());
     </div>
 
     <template v-if="map && loadState === 'ready'">
+      <ControlledAreaLayer :map="map" :api="api" />
       <RouteLayer :map="map" />
       <CameraLayer :map="map" :api="api" />
       <CurrentLocationLayer :map="map" />

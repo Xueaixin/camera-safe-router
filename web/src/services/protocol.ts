@@ -7,6 +7,7 @@ import {
   type ExternalHandoff,
   type CameraPage,
   type CameraSnapshotStatus,
+  type ControlledArea,
   type HealthResponse,
   type NavigationHandoff,
   type ReadinessResponse,
@@ -112,11 +113,21 @@ function parseBoundaryCrossing(value: unknown): BoundaryCrossing {
   };
 }
 
-function parseExternalHandoff(value: unknown): ExternalHandoff {
+function parseExternalHandoff(
+  value: unknown,
+  handoffType: NavigationHandoff['type'],
+): ExternalHandoff {
   if (!isRecord(value)) throw new ProtocolError('环外交接位置结构无效');
+  const expectedPoiRadius =
+    handoffType === 'HIGHWAY'
+      ? 0
+      : isNonNegativeNumber(value.boundaryClearanceMeters)
+        ? Math.floor(Math.min(200, Math.max(0, value.boundaryClearanceMeters - 25)))
+        : -1;
   if (
     !isNonNegativeNumber(value.boundaryClearanceMeters) ||
-    !isNonNegativeInteger(value.poiSearchRadiusMeters)
+    !isNonNegativeInteger(value.poiSearchRadiusMeters) ||
+    value.poiSearchRadiusMeters !== expectedPoiRadius
   ) {
     throw new ProtocolError('环外交接位置边界距离或搜索半径无效');
   }
@@ -137,11 +148,15 @@ function parseNavigationHandoff(value: unknown): NavigationHandoff {
   if (roadName !== undefined && roadName !== null && typeof roadName !== 'string') {
     throw new ProtocolError('导航交接点道路名称无效');
   }
+  if (value.type !== 'ORDINARY_ROAD' && value.type !== 'HIGHWAY') {
+    throw new ProtocolError('导航交接点类型无效');
+  }
   return {
     wgs84: outputCoordinate(value.wgs84, '导航交接点 WGS84'),
     gcj02: outputCoordinate(value.gcj02, '导航交接点 GCJ02'),
     boundaryClearanceMeters: value.boundaryClearanceMeters,
     ...(roadName !== undefined ? { roadName } : {}),
+    type: value.type,
   };
 }
 
@@ -201,7 +216,9 @@ export function parseRouteResponse(value: unknown): RouteResponse {
   const navigationHandoff =
     navigationHandoffValue === null ? null : parseNavigationHandoff(navigationHandoffValue);
   const externalHandoff =
-    externalHandoffValue === null ? null : parseExternalHandoff(externalHandoffValue);
+    externalHandoffValue === null
+      ? null
+      : parseExternalHandoff(externalHandoffValue, navigationHandoff?.type ?? 'ORDINARY_ROAD');
   const safeSegment = safeValue === null ? null : parseSegment(safeValue, '环内安全段');
   const referenceSegment =
     referenceValue === null ? null : parseSegment(referenceValue, '环外参考段');
@@ -246,14 +263,28 @@ export function parseRouteResponse(value: unknown): RouteResponse {
         safeSegment?.geometry[0]?.lat === navigationHandoff.gcj02.lat &&
         referenceSegment?.geometry.at(-1)?.lng === navigationHandoff.gcj02.lng &&
         referenceSegment?.geometry.at(-1)?.lat === navigationHandoff.gcj02.lat);
+  const handoffPairMatches = (navigationHandoff === null) === (externalHandoff === null);
+  const handoffCoordinatesMatch =
+    navigationHandoff === null ||
+    (externalHandoff !== null &&
+      navigationHandoff.wgs84.lng === externalHandoff.wgs84.lng &&
+      navigationHandoff.wgs84.lat === externalHandoff.wgs84.lat &&
+      navigationHandoff.gcj02.lng === externalHandoff.gcj02.lng &&
+      navigationHandoff.gcj02.lat === externalHandoff.gcj02.lat);
+  const handoffTypeMatches =
+    navigationHandoff === null ||
+    navigationHandoff.type === 'ORDINARY_ROAD' ||
+    expectedDirection === 'INBOUND';
   const crossBoundaryShape =
     expectedDirection !== null &&
     direction === expectedDirection &&
     crossing?.direction === expectedDirection &&
     crossing?.boundaryRole === expectedRole &&
-    externalHandoff !== null &&
     safeSegment !== null &&
     referenceSegment !== null &&
+    handoffPairMatches &&
+    handoffCoordinatesMatch &&
+    handoffTypeMatches &&
     navigationJoinMatches;
   if (!internalShape && !externalShape && !crossBoundaryShape) {
     throw new ProtocolError('路线规划模式与分段结构不一致');
@@ -315,7 +346,14 @@ export function parseCameraSnapshotStatus(value: unknown): CameraSnapshotStatus 
   if (!isRecord(value) || value.status !== 'READY') {
     throw new ProtocolError('摄像头快照响应无效');
   }
-  if (!isNonNegativeInteger(value.cameraCount) || !isNonNegativeNumber(value.safetyRadiusMeters)) {
+  if (
+    !isNonNegativeInteger(value.cameraCount) ||
+    !isNonNegativeInteger(value.sourceCameraCount) ||
+    !isNonNegativeInteger(value.outsideControlAreaCameraCount) ||
+    value.cameraCount + value.outsideControlAreaCameraCount !== value.sourceCameraCount ||
+    !isNonNegativeNumber(value.cameraOutsideMarginMeters) ||
+    !isNonNegativeNumber(value.safetyRadiusMeters)
+  ) {
     throw new ProtocolError('摄像头快照统计无效');
   }
   return {
@@ -323,8 +361,51 @@ export function parseCameraSnapshotStatus(value: unknown): CameraSnapshotStatus 
     snapshotVersion: stringField(value, 'snapshotVersion'),
     blockedEdgeVersion: stringField(value, 'blockedEdgeVersion'),
     cameraCount: value.cameraCount,
+    sourceCameraCount: value.sourceCameraCount,
+    outsideControlAreaCameraCount: value.outsideControlAreaCameraCount,
+    cameraOutsideMarginMeters: value.cameraOutsideMarginMeters,
+    controlBoundaryVersion: stringField(value, 'controlBoundaryVersion'),
     safetyRadiusMeters: value.safetyRadiusMeters,
     loadedAt: stringField(value, 'loadedAt'),
+  };
+}
+
+export function parseControlledArea(value: unknown): ControlledArea {
+  if (
+    !isRecord(value) ||
+    value.coordinateSystem !== 'GCJ02' ||
+    typeof value.approvedForProduction !== 'boolean' ||
+    !isNonNegativeNumber(value.cameraOutsideMarginMeters) ||
+    !isRecord(value.geometry) ||
+    value.geometry.type !== 'MultiPolygon' ||
+    !Array.isArray(value.geometry.coordinates) ||
+    value.geometry.coordinates.length === 0
+  ) {
+    throw new ProtocolError('受控区响应无效');
+  }
+  const coordinates = value.geometry.coordinates.map((polygon, polygonIndex) => {
+    if (!Array.isArray(polygon) || polygon.length === 0) {
+      throw new ProtocolError(`受控区多边形 ${polygonIndex} 无效`);
+    }
+    return polygon.map((ring, ringIndex) => {
+      if (!Array.isArray(ring) || ring.length < 4) {
+        throw new ProtocolError(`受控区边界环 ${polygonIndex}:${ringIndex} 无效`);
+      }
+      const parsed = ring.map((point) => outputCoordinate(point, '受控区'));
+      const first = parsed[0];
+      const last = parsed.at(-1);
+      if (!first || !last || first.lng !== last.lng || first.lat !== last.lat) {
+        throw new ProtocolError(`受控区边界环 ${polygonIndex}:${ringIndex} 未闭合`);
+      }
+      return parsed;
+    });
+  });
+  return {
+    boundaryVersion: stringField(value, 'boundaryVersion'),
+    coordinateSystem: 'GCJ02',
+    geometry: { type: 'MultiPolygon', coordinates },
+    approvedForProduction: value.approvedForProduction,
+    cameraOutsideMarginMeters: value.cameraOutsideMarginMeters,
   };
 }
 

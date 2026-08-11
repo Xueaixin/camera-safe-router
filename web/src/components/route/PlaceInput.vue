@@ -11,6 +11,7 @@ const props = defineProps<{
   kind: 'start' | 'end';
   place: SelectedPlace | null;
   allowCurrent?: boolean;
+  currentStatus?: string | null;
   searchPlaces: (keyword: string, signal?: AbortSignal) => Promise<PlaceSuggestion[]>;
 }>();
 
@@ -183,6 +184,10 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
+    <small v-if="allowCurrent && currentStatus" class="place-input__status" role="status">
+      {{ currentStatus }}
+    </small>
+
     <div
       v-if="isOpen"
       :id="`${id}-suggestions`"
@@ -202,6 +207,7 @@ onBeforeUnmount(() => {
           { 'is-active': activeIndex === 0 },
         ]"
         data-testid="use-current-option"
+        @mousedown.prevent="chooseCurrent"
         @click="chooseCurrent"
       >
         <Navigation :size="16" aria-hidden="true" />

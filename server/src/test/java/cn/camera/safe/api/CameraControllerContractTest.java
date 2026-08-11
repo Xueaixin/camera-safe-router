@@ -76,6 +76,10 @@ class CameraControllerContractTest {
                 .andExpect(jsonPath("$.snapshotVersion").value("camera-v1"))
                 .andExpect(jsonPath("$.blockedEdgeVersion").value("blocked-v1"))
                 .andExpect(jsonPath("$.cameraCount").value(1))
+                .andExpect(jsonPath("$.sourceCameraCount").value(1))
+                .andExpect(jsonPath("$.outsideControlAreaCameraCount").value(0))
+                .andExpect(jsonPath("$.cameraOutsideMarginMeters").value(0))
+                .andExpect(jsonPath("$.controlBoundaryVersion").value("legacy-unscoped"))
                 .andExpect(jsonPath("$.safetyRadiusMeters").value(30));
     }
 

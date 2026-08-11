@@ -37,6 +37,8 @@ export interface AmapPolyline extends AmapOverlay {
   setPath(path: [number, number][]): void;
 }
 
+export type AmapPolygon = AmapOverlay;
+
 export interface AmapCircle extends AmapOverlay {
   setCenter(position: [number, number]): void;
   setRadius(radius: number): void;
@@ -81,6 +83,7 @@ export interface AmapNamespace {
   Map: new (container: HTMLElement, options: Record<string, unknown>) => AmapMap;
   Marker: new (options: Record<string, unknown>) => AmapMarker;
   Polyline: new (options: Record<string, unknown>) => AmapPolyline;
+  Polygon: new (options: Record<string, unknown>) => AmapPolygon;
   Circle: new (options: Record<string, unknown>) => AmapCircle;
   MassMarks: new (data: AmapMassMarkData[], options: Record<string, unknown>) => AmapMassMarks;
   InfoWindow: new (options: Record<string, unknown>) => AmapInfoWindow;

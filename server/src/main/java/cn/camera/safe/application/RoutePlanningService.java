@@ -8,6 +8,7 @@ import cn.camera.safe.api.model.BoundaryRole;
 import cn.camera.safe.api.model.ExternalHandoff;
 import cn.camera.safe.api.model.InputCoordinate;
 import cn.camera.safe.api.model.NavigationHandoff;
+import cn.camera.safe.api.model.NavigationHandoffType;
 import cn.camera.safe.api.model.OutputCoordinate;
 import cn.camera.safe.api.model.RouteRequest;
 import cn.camera.safe.api.model.RouteResponse;
@@ -28,6 +29,9 @@ import cn.camera.safe.routing.RoutingSnapshot;
 import cn.camera.safe.routing.RoutingSnapshotManager;
 import cn.camera.safe.routing.SixthRingPortal;
 import cn.camera.safe.routing.SixthRingRouteException;
+import com.graphhopper.routing.ev.BooleanEncodedValue;
+import com.graphhopper.routing.util.EdgeFilter;
+import com.graphhopper.storage.index.Snap;
 import cn.camera.safe.validation.RouteSafetyValidator;
 import cn.camera.safe.validation.SafetyValidationResult;
 import org.slf4j.Logger;
@@ -90,17 +94,17 @@ public final class RoutePlanningService {
             throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,
                     ErrorCode.OUTSIDE_ROUTING_BOUNDS, "起点或终点不在当前路网支持范围");
         }
-        if (safetyValidator.isRestricted(start, snapshot)) {
+        if (isRestrictedEndpoint(start, snapshot)) {
             throw new BusinessException(HttpStatus.CONFLICT,
                     ErrorCode.START_IN_RESTRICTED_AREA, "起点位于摄像头避让范围内");
         }
-        if (safetyValidator.isRestricted(end, snapshot)) {
+        if (isRestrictedEndpoint(end, snapshot)) {
             throw new BusinessException(HttpStatus.CONFLICT,
                     ErrorCode.END_IN_RESTRICTED_AREA, "终点位于摄像头避让范围内");
         }
 
         PlannedRoute plannedRoute = calculate(start, end, snapshot);
-        SafetyValidationResult safety = safetyValidator.validate(plannedRoute.geometry(), snapshot);
+        SafetyValidationResult safety = safetyValidator.validate(plannedRoute, snapshot);
         if (!safety.compliant()) {
             throw new BusinessException(HttpStatus.CONFLICT,
                     ErrorCode.ROUTE_CONFLICT_DETECTED,
@@ -260,7 +264,8 @@ public final class RoutePlanningService {
                 new OutputCoordinate(handoff.coordinate().lng(), handoff.coordinate().lat()),
                 new OutputCoordinate(gcj02.lng(), gcj02.lat()),
                 handoff.boundaryClearanceMeters(),
-                handoff.roadName());
+                handoff.roadName(),
+                NavigationHandoffType.valueOf(handoff.type().name()));
     }
 
     private List<OutputCoordinate> outputGeometry(List<Wgs84Coordinate> geometry) {
@@ -281,5 +286,22 @@ public final class RoutePlanningService {
             throw new BusinessException(HttpStatus.BAD_REQUEST,
                     ErrorCode.INVALID_COORDINATE, "坐标无效");
         }
+    }
+
+    private boolean isRestrictedEndpoint(
+            Wgs84Coordinate point,
+            RoutingSnapshot snapshot) {
+        if (!safetyValidator.isRestricted(point, snapshot)
+                || snapshot.roadClassification().highwayMainlineEdgeCount() == 0) {
+            return safetyValidator.isRestricted(point, snapshot);
+        }
+        var hopper = graphManager.requireHopper();
+        BooleanEncodedValue carAccess = hopper.getEncodingManager()
+                .getBooleanEncodedValue("car_access");
+        EdgeFilter routable = edge -> edge.get(carAccess) || edge.getReverse(carAccess);
+        Snap snap = hopper.getLocationIndex().findClosest(point.lat(), point.lng(), routable);
+        return !snap.isValid()
+                || safetyValidator.isRestricted(
+                        point, snapshot, snap.getClosestEdge().getEdge());
     }
 }

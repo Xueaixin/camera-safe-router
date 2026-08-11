@@ -15,8 +15,9 @@ import type {
   AmapMassMarks,
   AmapNamespace,
   AmapPolyline,
+  AmapPolygon,
 } from '@/types/amap';
-import type { CameraView, OutputCoordinate } from '@/types/api';
+import type { CameraView, ControlledArea, OutputCoordinate } from '@/types/api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from '@/types/coordinate';
 import type {
   HandoffMarkerData,
@@ -52,7 +53,6 @@ function markerElement(kind: 'start' | 'end' | 'current' | 'outbound' | 'inbound
   return marker;
 }
 
-const HANDOFF_LANDMARK_RADIUS_METERS = 200;
 const PRIMARY_TRAFFIC_LANDMARK = /收费站|高速.*(?:入口|出口)|高速公路出入口|互通/;
 const SECONDARY_TRAFFIC_LANDMARK = /交通设施|道路附属设施|路口|桥|立交/;
 
@@ -136,6 +136,7 @@ export class AmapMapAdapter implements MapAdapter {
   private handoffDescription: Promise<string> | null = null;
   private routePolyline: AmapPolyline | null = null;
   private cameraLayer: AmapMassMarks | null = null;
+  private controlledAreaPolygons: AmapPolygon[] = [];
   private currentMarker: AmapMarker | null = null;
   private accuracyCircle: AmapCircle | null = null;
   private infoWindow: AmapInfoWindow | null = null;
@@ -172,6 +173,7 @@ export class AmapMapAdapter implements MapAdapter {
   destroy() {
     this.clearRoute();
     this.clearCameras();
+    this.clearControlledArea();
     this.setEndpointMarkers(null, null);
     this.setHandoffMarker(null);
     this.setCurrentLocation(null);
@@ -358,6 +360,30 @@ export class AmapMapAdapter implements MapAdapter {
     if (this.infoWindowKind === 'camera') this.closeInfoWindow();
   }
 
+  setControlledArea(area: ControlledArea) {
+    if (!this.amap || !this.map) return;
+    this.clearControlledArea();
+    this.controlledAreaPolygons = area.geometry.coordinates.map(
+      (polygon) =>
+        new this.amap!.Polygon({
+          map: this.map,
+          path: polygon.map((ring) => ring.map(lngLatTuple)),
+          strokeColor: '#b45309',
+          strokeWeight: 2,
+          strokeOpacity: 0.9,
+          fillColor: '#f59e0b',
+          fillOpacity: 0.09,
+          bubble: true,
+          zIndex: 10,
+        }),
+    );
+  }
+
+  clearControlledArea() {
+    this.controlledAreaPolygons.forEach((polygon) => polygon.setMap(null));
+    this.controlledAreaPolygons = [];
+  }
+
   setCurrentLocation(location: DisplayLocation | null) {
     if (!this.amap || !this.map || !location) {
       this.currentMarker?.setMap(null);
@@ -527,10 +553,14 @@ export class AmapMapAdapter implements MapAdapter {
   }
 
   private resolveNavigationHandoffDescription(data: HandoffMarkerData): Promise<string> {
+    if (data.navigationHandoff.type === 'HIGHWAY') {
+      return Promise.resolve(data.navigationHandoff.roadName || '受控区外高速交接点');
+    }
     if (!this.amap) return Promise.reject(new Error('地图尚未加载'));
+    const poiRadius = data.externalHandoff.poiSearchRadiusMeters;
     const geocoder = new this.amap.Geocoder({
       extensions: 'all',
-      radius: HANDOFF_LANDMARK_RADIUS_METERS,
+      radius: Math.max(1, poiRadius),
     });
     return new Promise((resolve, reject) => {
       geocoder.getAddress(lngLatTuple(data.navigationHandoff.gcj02), (status, result) => {
@@ -540,8 +570,8 @@ export class AmapMapAdapter implements MapAdapter {
         }
         const regeocode = result.regeocode;
         let placeName = '';
-        if (Array.isArray(regeocode.pois)) {
-          const poi = selectHandoffPoi(regeocode.pois, HANDOFF_LANDMARK_RADIUS_METERS);
+        if (poiRadius > 0 && Array.isArray(regeocode.pois)) {
+          const poi = selectHandoffPoi(regeocode.pois, poiRadius);
           if (poi) placeName = describeHandoffPoi(regeocode, poi);
         }
         if (!placeName && typeof regeocode.formattedAddress === 'string') {

@@ -3,8 +3,10 @@ package cn.camera.safe.routing;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LinearRing;
+import org.locationtech.jts.geom.MultiPolygon;
 import org.locationtech.jts.geom.Polygon;
 import org.springframework.stereotype.Component;
 
@@ -53,42 +55,78 @@ public final class SixthRingBoundaryLoader {
             throw new IllegalStateException("六环边界尚未获准用于生产");
         }
 
-        Polygon inner = null;
-        Polygon outer = null;
+        Geometry controlledArea = null;
+        Geometry sixthRingArea = null;
+        Geometry tongzhouArea = null;
+        Polygon legacyInside = null;
         for (JsonNode feature : root.path("features")) {
             String role = feature.path("properties").path("role").asText();
             JsonNode geometry = feature.path("geometry");
-            if (!"Polygon".equals(geometry.path("type").asText())) {
-                throw new IllegalStateException("六环边界要素必须是 Polygon");
-            }
-            Polygon polygon = polygon(geometry.path("coordinates"));
-            if ("inside_boundary".equals(role)) {
-                if (inner != null) {
-                    throw new IllegalStateException("六环边界文件包含重复的 inside_boundary");
+            if ("controlled_area".equals(role)) {
+                if (controlledArea != null) {
+                    throw new IllegalStateException("受控区边界文件包含重复的 controlled_area");
                 }
-                inner = polygon;
-            } else if ("outside_boundary".equals(role)) {
-                if (outer != null) {
-                    throw new IllegalStateException("六环边界文件包含重复的 outside_boundary");
+                controlledArea = polygonalGeometry(geometry);
+            } else if ("sixth_ring_area".equals(role)) {
+                if (sixthRingArea != null) {
+                    throw new IllegalStateException("受控区边界文件包含重复的 sixth_ring_area");
                 }
-                outer = polygon;
+                sixthRingArea = polygonalGeometry(geometry);
+            } else if ("tongzhou_area".equals(role)) {
+                if (tongzhouArea != null) {
+                    throw new IllegalStateException("受控区边界文件包含重复的 tongzhou_area");
+                }
+                tongzhouArea = polygonalGeometry(geometry);
+            } else if ("inside_boundary".equals(role)) {
+                if (legacyInside != null) {
+                    throw new IllegalStateException("旧版六环边界文件包含重复的 inside_boundary");
+                }
+                legacyInside = polygon(geometry);
             }
         }
-        if (inner == null || outer == null) {
-            throw new IllegalStateException("六环边界文件必须同时包含内侧和外侧闭环");
+        if (controlledArea == null) {
+            controlledArea = legacyInside;
+        }
+        if (root.path("schemaVersion").asInt(1) >= 2 && tongzhouArea == null) {
+            throw new IllegalStateException("第二版受控区边界文件必须包含 tongzhou_area 辅助要素");
+        }
+        if (root.path("schemaVersion").asInt(1) >= 3 && sixthRingArea == null) {
+            throw new IllegalStateException("第三版受控区边界文件必须包含 sixth_ring_area 辅助要素");
+        }
+        if (controlledArea == null) {
+            throw new IllegalStateException(
+                    "受控区边界文件必须包含 controlled_area；迁移期旧文件至少包含 inside_boundary");
         }
 
         String version = "sha256:" + Hashing.sha256(normalized);
         return new LoadedBoundary(
-                new SixthRingBoundary(inner, outer, version),
+                new SixthRingBoundary(controlledArea, sixthRingArea, tongzhouArea, version),
                 sourcePbfSha256.toLowerCase(),
                 approvedForProduction,
                 normalized);
     }
 
-    private static Polygon polygon(JsonNode rings) {
+    static Geometry polygonalGeometry(JsonNode geometry) {
+        String type = geometry.path("type").asText();
+        JsonNode coordinates = geometry.path("coordinates");
+        return switch (type) {
+            case "Polygon" -> polygonCoordinates(coordinates);
+            case "MultiPolygon" -> multiPolygon(coordinates);
+            default -> throw new IllegalStateException(
+                    "受控区边界几何必须是 Polygon 或 MultiPolygon");
+        };
+    }
+
+    private static Polygon polygon(JsonNode geometry) {
+        if (!"Polygon".equals(geometry.path("type").asText())) {
+            throw new IllegalStateException("旧版六环边界要素必须是 Polygon");
+        }
+        return polygonCoordinates(geometry.path("coordinates"));
+    }
+
+    private static Polygon polygonCoordinates(JsonNode rings) {
         if (!rings.isArray() || rings.isEmpty()) {
-            throw new IllegalStateException("六环边界 Polygon 坐标为空");
+            throw new IllegalStateException("受控区 Polygon 坐标为空");
         }
         LinearRing shell = linearRing(rings.get(0));
         LinearRing[] holes = new LinearRing[Math.max(0, rings.size() - 1)];
@@ -96,6 +134,17 @@ public final class SixthRingBoundaryLoader {
             holes[index - 1] = linearRing(rings.get(index));
         }
         return GEOMETRY_FACTORY.createPolygon(shell, holes);
+    }
+
+    private static MultiPolygon multiPolygon(JsonNode polygons) {
+        if (!polygons.isArray() || polygons.isEmpty()) {
+            throw new IllegalStateException("受控区 MultiPolygon 坐标为空");
+        }
+        Polygon[] values = new Polygon[polygons.size()];
+        for (int index = 0; index < polygons.size(); index++) {
+            values[index] = polygonCoordinates(polygons.get(index));
+        }
+        return GEOMETRY_FACTORY.createMultiPolygon(values);
     }
 
     private static LinearRing linearRing(JsonNode coordinates) {

@@ -19,7 +19,7 @@ public final class TraversalConstrainedWeighting extends AbstractAdjustedWeighti
 
     @Override
     public double calcEdgeWeight(EdgeIteratorState edgeState, boolean reverse) {
-        if (!constraint.allows(edgeState)) {
+        if (!constraint.allows(edgeState, reverse)) {
             return Double.POSITIVE_INFINITY;
         }
         return super.calcEdgeWeight(edgeState, reverse);

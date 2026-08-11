@@ -5,6 +5,13 @@ import cn.camera.safe.coordinate.Wgs84Coordinate;
 import com.graphhopper.GHRequest;
 import com.graphhopper.GHResponse;
 import com.graphhopper.ResponsePath;
+import com.graphhopper.routing.ev.BooleanEncodedValue;
+import com.graphhopper.routing.ev.EnumEncodedValue;
+import com.graphhopper.routing.ev.RoadClass;
+import com.graphhopper.routing.ev.RoadClassLink;
+import com.graphhopper.routing.ev.RoadEnvironment;
+import com.graphhopper.storage.BaseGraph;
+import com.graphhopper.util.EdgeIteratorState;
 import com.graphhopper.util.Parameters;
 import com.graphhopper.util.PointList;
 import com.graphhopper.util.details.PathDetail;
@@ -12,6 +19,7 @@ import com.graphhopper.util.exceptions.MaximumNodesExceededException;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.ArrayList;
 
 import static com.graphhopper.util.Parameters.Algorithms.ASTAR_BI;
 import static com.graphhopper.util.Parameters.Details.EDGE_KEY;
@@ -71,9 +79,44 @@ public final class GraphHopperRoutingEngine implements RoutingEngine {
                 best.getDistance(),
                 best.getTime(),
                 geometry,
+                routeTrace(best, geometry),
                 audit.edgeChecks(),
                 audit.virtualEdgeChecks(),
                 audit.blockedRejections());
+    }
+
+    private List<RouteTracePoint> routeTrace(
+            ResponsePath path,
+            List<Wgs84Coordinate> geometry) {
+        BaseGraph graph = graphManager.requireHopper().getBaseGraph();
+        EnumEncodedValue<RoadClass> roadClass = graphManager.requireHopper()
+                .getEncodingManager().getEnumEncodedValue(RoadClass.KEY, RoadClass.class);
+        BooleanEncodedValue roadClassLink = graphManager.requireHopper()
+                .getEncodingManager().getBooleanEncodedValue(RoadClassLink.KEY);
+        EnumEncodedValue<RoadEnvironment> roadEnvironment = graphManager.requireHopper()
+                .getEncodingManager().getEnumEncodedValue(
+                        RoadEnvironment.KEY, RoadEnvironment.class);
+        List<RouteTracePoint> trace = new ArrayList<>();
+        for (PathDetail detail : path.getPathDetails().get(EDGE_KEY)) {
+            int edgeKey = (Integer) detail.getValue();
+            EdgeIteratorState edge = graph.getEdgeIteratorStateForKey(edgeKey);
+            if (edge == null) {
+                throw new IllegalStateException(
+                        "GraphHopper path detail references an unknown edge key: " + edgeKey);
+            }
+            int last = Math.min(detail.getLast(), geometry.size() - 1);
+            for (int index = Math.max(0, detail.getFirst()); index <= last; index++) {
+                trace.add(new RouteTracePoint(
+                        index,
+                        geometry.get(index),
+                        edge.getName(),
+                        edge.get(roadClass),
+                        edge.get(roadClassLink),
+                        edge.get(roadEnvironment),
+                        edgeKey));
+            }
+        }
+        return List.copyOf(trace);
     }
 
     static RoutingEngineException.Reason classifyErrors(List<Throwable> errors) {

@@ -47,6 +47,20 @@ export interface NavigationHandoff {
   gcj02: OutputCoordinate;
   boundaryClearanceMeters: number;
   roadName?: string | null;
+  type: 'ORDINARY_ROAD' | 'HIGHWAY';
+}
+
+export interface ControlledAreaGeometry {
+  type: 'MultiPolygon';
+  coordinates: OutputCoordinate[][][];
+}
+
+export interface ControlledArea {
+  boundaryVersion: string;
+  coordinateSystem: 'GCJ02';
+  geometry: ControlledAreaGeometry;
+  approvedForProduction: boolean;
+  cameraOutsideMarginMeters: number;
 }
 
 export interface RouteSegment {
@@ -95,6 +109,10 @@ export interface CameraSnapshotStatus {
   snapshotVersion: string;
   blockedEdgeVersion: string;
   cameraCount: number;
+  sourceCameraCount: number;
+  outsideControlAreaCameraCount: number;
+  cameraOutsideMarginMeters: number;
+  controlBoundaryVersion: string;
   safetyRadiusMeters: number;
   loadedAt: string;
 }

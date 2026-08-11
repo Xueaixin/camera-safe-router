@@ -53,4 +53,19 @@ describe('RouteSearchPanel', () => {
     expect(wrapper.emitted('useCurrent')).toHaveLength(2);
     expect(wrapper.find('[data-testid="use-current-option"]').exists()).toBe(false);
   });
+
+  it('shows direct current-location progress beside the start field', () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const wrapper = mount(RouteSearchPanel, {
+      props: {
+        searchPlaces: async () => [],
+        currentLocationStatus: '正在获取当前位置',
+      },
+      global: { plugins: [pinia] },
+    });
+
+    expect(wrapper.get('.place-input__status').text()).toBe('正在获取当前位置');
+    expect(wrapper.get('.place-input__status').attributes('role')).toBe('status');
+  });
 });

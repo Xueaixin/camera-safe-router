@@ -56,11 +56,13 @@ class RoutingFoundationPocTest {
             Map<RoadAccess, Long> roadAccessCounts = roadAccessCounts(hopper);
 
             RoutingProfileMode profileMode = properties.routing().profileMode();
-            if (profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1) {
+            if (profileMode != RoutingProfileMode.CURRENT) {
                 assertThat(profile.hasTurnCosts()).isTrue();
                 assertThat(turnEncodingPresent).isTrue();
-                assertThat(customModel.getDistanceInfluence())
-                        .isEqualTo(RoutingGraphConfiguration.DISTANCE_INFLUENCE_SECONDS_PER_KILOMETER);
+                assertThat(customModel.getDistanceInfluence()).isEqualTo(
+                        profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
+                                ? RoutingGraphConfiguration.DISTANCE_INFLUENCE_SECONDS_PER_KILOMETER
+                                : 90.0);
                 assertThat(roadAccessReferenced).isTrue();
             } else {
                 assertThat(profile.hasTurnCosts()).as("current car profile turn costs").isFalse();
@@ -123,9 +125,14 @@ class RoutingFoundationPocTest {
                 .append("| `car.json` distance influence | ")
                 .append(String.format(Locale.ROOT, "%.1f", customModel.getDistanceInfluence())).append(" |\n")
                 .append("| `car.json` 引用 road_access | ").append(roadAccessReferenced).append(" |\n\n")
-                .append(profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
-                        ? "候选缓存已导入机动车转向限制，使用距离主导权重，并通过 road_access 入口规则避免把受限道路用作普通穿行道路；精确业务语义仍由最小图和真实路线回归共同验证。\n\n"
-                        : "当前缓存没有导入可供搜索使用的转向限制；当前内置 `car.json` 是时间权重叠加每公里 90 秒的距离影响，不是距离最短权重；虽然图中编码了 `road_access`，当前模型没有使用它。三项都不满足正式六环算法的正确性门槛。\n\n")
+                .append(switch (profileMode) {
+                    case COMPLIANT_DISTANCE_V1 ->
+                            "候选缓存已导入机动车转向限制，使用距离主导权重，并通过 road_access 入口规则避免把受限道路用作普通穿行道路。\n\n";
+                    case COMPLIANT_TIME_V2 ->
+                            "候选缓存已导入机动车转向限制，使用时间优先权重、道路身份编码和 road_access 入口规则。\n\n";
+                    case CURRENT ->
+                            "当前缓存没有导入可供搜索使用的转向限制；内置 car.json 未使用 road_access，不满足当前正式算法门槛。\n\n";
+                })
                 .append("## 可驾车有向遍历的 road_access 分布\n\n")
                 .append("| road_access | 遍历数 |\n|---|---:|\n");
         for (RoadAccess access : RoadAccess.values()) {
@@ -143,9 +150,9 @@ class RoutingFoundationPocTest {
         Path currentCache = profileMode == RoutingProfileMode.CURRENT
                 ? graphCache
                 : graphCache.resolveSibling(graphCache.getFileName() + "-current-reference");
-        Path candidateCache = profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
-                ? graphCache
-                : graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference");
+        Path candidateCache = profileMode == RoutingProfileMode.CURRENT
+                ? graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference")
+                : graphCache;
         return new AppProperties(
                 new AppProperties.Routing(
                         pbf.toString(), currentCache.toString(), candidateCache.toString(), profileMode,

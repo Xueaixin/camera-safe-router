@@ -7,6 +7,10 @@ public record CameraSnapshotStatus(
         String snapshotVersion,
         String blockedEdgeVersion,
         int cameraCount,
+        int sourceCameraCount,
+        int outsideControlAreaCameraCount,
+        double cameraOutsideMarginMeters,
+        String controlBoundaryVersion,
         double safetyRadiusMeters,
         Instant loadedAt) {
     public CameraSnapshotStatus {

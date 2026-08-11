@@ -2,6 +2,7 @@ import type {
   BoundingBox,
   CameraPage,
   CameraSnapshotStatus,
+  ControlledArea,
   HealthResponse,
   ReadinessResponse,
   RouteRequest,
@@ -17,6 +18,7 @@ export interface ApiClient {
     signal?: AbortSignal,
   ): Promise<CameraPage>;
   getCurrentCameraSnapshot(signal?: AbortSignal): Promise<CameraSnapshotStatus>;
+  getControlledArea(signal?: AbortSignal): Promise<ControlledArea>;
   health(signal?: AbortSignal): Promise<HealthResponse>;
   readiness(signal?: AbortSignal): Promise<ReadinessResponse>;
 }

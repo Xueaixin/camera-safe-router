@@ -1,0 +1,14 @@
+# 候选开发数据 profile（跨设备可用，不含机器绝对路径）。
+#
+# 布局约定：仓库根 code 与离线工作区 workspace 位于同一父目录（routing-plan），
+# 即 code/../.. 与 workspace 同级；候选产物在 workspace/work 下。
+# 工作目录必须是 server 模块根（IDEA 运行配置已设 $PROJECT_DIR$，
+# 命令行启动请先 cd 到 code/server），否则相对路径会解析错误。
+#
+# 正式数据不需要本 profile：直接使用 application.yml 的默认数据根目录。
+app:
+  routing:
+    graph-cache-path: ../../workspace/work/graph-cache-candidates/jingjinji-compliant-time-v2-20260807-current
+    candidate-graph-cache-path: ../../workspace/work/graph-cache-candidates/jingjinji-compliant-time-v2-20260807
+  sixth-ring:
+    boundary-path: ../../workspace/work/controlled-area-v1/controlled-area-boundary-candidate.geojson

@@ -3,13 +3,44 @@ package cn.camera.safe.routing;
 import com.graphhopper.GHRequest;
 import com.graphhopper.GHResponse;
 import com.graphhopper.GraphHopper;
+import com.graphhopper.routing.ev.ImportUnit;
+import com.graphhopper.routing.util.OSMParsers;
 import com.graphhopper.routing.WeightingFactory;
+import com.graphhopper.util.PMap;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /** GraphHopper 11 integration that supplies one immutable restriction snapshot per route call. */
 public final class HardAvoidingGraphHopper extends GraphHopper {
     private final ThreadLocal<RouteContext> routeContext = new ThreadLocal<>();
+
+    public HardAvoidingGraphHopper() {
+        setImportRegistry(new RoadIdentityImportRegistry());
+    }
+
+    @Override
+    protected OSMParsers buildOSMParsers(
+            Map<String, PMap> encodedValuesWithProps,
+            Map<String, ImportUnit> activeImportUnits,
+            Map<String, List<String>> restrictionVehicleTypesByProfile,
+            List<String> ignoredHighways) {
+        OSMParsers parsers = super.buildOSMParsers(
+                encodedValuesWithProps,
+                activeImportUnits,
+                restrictionVehicleTypesByProfile,
+                ignoredHighways);
+        if (getEncodingManager().hasEncodedValue(
+                RoadIdentityEncodedValues.SIXTH_RING_MAINLINE)) {
+            parsers.addRelationTagParser(relationConfig ->
+                    new SixthRingMainlineRelationParser(
+                            getEncodingManager().getBooleanEncodedValue(
+                                    RoadIdentityEncodedValues.SIXTH_RING_MAINLINE),
+                            relationConfig));
+        }
+        return parsers;
+    }
 
     public GHResponse route(GHRequest request, BlockedEdgeSnapshot snapshot, SearchAudit audit) {
         return route(request, snapshot, audit, EdgeTraversalConstraint.ALLOW_ALL);

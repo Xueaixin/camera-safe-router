@@ -84,13 +84,14 @@ final class EdgeKeyMultiTargetDijkstra {
         long deadlineNanos = System.nanoTime() + timeout.toNanos();
         EdgeExplorer explorer = graph.createEdgeExplorer();
         PriorityQueue<QueueState> queue = new PriorityQueue<>(
-                Comparator.comparingDouble(QueueState::weight));
+                Comparator.comparingDouble(QueueState::distanceMeters)
+                        .thenComparingDouble(QueueState::travelTimeSeconds));
         Map<Integer, SettledState> bestStates = new HashMap<>();
         Map<String, PortalPath> bestPortals = new LinkedHashMap<>();
         SearchCursor cursor = new SearchCursor(Double.POSITIVE_INFINITY);
 
         relaxFromNode(
-                weighting, explorer, sourceNode, NO_EDGE, -1, 0,
+                weighting, explorer, sourceNode, NO_EDGE, -1, 0, 0,
                 portalsByOriginalEdgeKey, direction, traversalConstraint,
                 queue, bestStates, bestPortals, cursor);
 
@@ -106,14 +107,18 @@ final class EdgeKeyMultiTargetDijkstra {
                 break;
             }
             QueueState next = queue.peek();
-            if (Double.isFinite(cursor.bestPortalDistance)
-                    && next.weight() > cursor.bestPortalDistance + toleranceMeters) {
+            if (Double.isFinite(cursor.bestPortalDistanceMeters)
+                    && next.distanceMeters()
+                    > cursor.bestPortalDistanceMeters + toleranceMeters) {
                 completion = Completion.TOLERANCE_SETTLED;
                 break;
             }
             queue.poll();
             SettledState best = bestStates.get(next.edgeKey());
-            if (best == null || Double.compare(best.weight(), next.weight()) != 0) {
+            if (best == null
+                    || Double.compare(
+                    best.travelTimeSeconds(), next.travelTimeSeconds()) != 0
+                    || Double.compare(best.distanceMeters(), next.distanceMeters()) != 0) {
                 continue;
             }
             if (visitedStates >= maxVisitedStates) {
@@ -122,21 +127,23 @@ final class EdgeKeyMultiTargetDijkstra {
             }
             visitedStates++;
             relaxFromNode(
-                    weighting, explorer, next.node(), next.edgeId(), next.edgeKey(), next.weight(),
+                    weighting, explorer, next.node(), next.edgeId(), next.edgeKey(),
+                    next.travelTimeSeconds(), next.distanceMeters(),
                     portalsByOriginalEdgeKey, direction, traversalConstraint,
                     queue, bestStates, bestPortals, cursor);
         }
 
-        double limit = cursor.bestPortalDistance + toleranceMeters;
+        double limit = cursor.bestPortalDistanceMeters + toleranceMeters;
         Map<String, PortalPath> retained = new LinkedHashMap<>();
         bestPortals.values().stream()
                 .filter(path -> path.distanceMeters() <= limit)
                 .sorted(Comparator.comparingDouble(PortalPath::distanceMeters)
+                        .thenComparingDouble(PortalPath::travelTimeSeconds)
                         .thenComparing(path -> path.portal().id()))
                 .forEach(path -> retained.put(path.portal().id(), path));
         return new SearchResult(
                 Map.copyOf(retained),
-                cursor.bestPortalDistance,
+                cursor.bestPortalDistanceMeters,
                 visitedStates,
                 completion,
                 completion == Completion.EXHAUSTED && retained.isEmpty());
@@ -148,7 +155,8 @@ final class EdgeKeyMultiTargetDijkstra {
             int node,
             int previousOrNextEdgeId,
             int predecessorStateKey,
-            double settledWeight,
+            double settledTravelTimeSeconds,
+            double settledDistanceMeters,
             Map<Integer, List<Portal>> portalsByOriginalEdgeKey,
             SearchDirection direction,
             EdgeTraversalConstraint traversalConstraint,
@@ -169,7 +177,7 @@ final class EdgeKeyMultiTargetDijkstra {
             if (!Double.isFinite(turnWeight) || turnWeight < 0) {
                 continue;
             }
-            double beforeEdge = settledWeight + turnWeight;
+            double beforeEdge = settledTravelTimeSeconds + turnWeight;
             int originalDirectedEdgeKey = originalDirectedEdgeKey(edge, reverse);
             List<Portal> edgePortals = portalsByOriginalEdgeKey.get(originalDirectedEdgeKey);
             if (edgePortals != null) {
@@ -179,13 +187,18 @@ final class EdgeKeyMultiTargetDijkstra {
                         continue;
                     }
                     double searchFraction = projection.fractionFromTraversalBase();
-                    if (!traversalConstraint.allows(edge, searchFraction)) {
+                    if (!traversalConstraint.allows(edge, reverse, searchFraction)) {
                         continue;
                     }
                     double directedFraction = reverse ? 1 - searchFraction : searchFraction;
-                    double portalDistance = beforeEdge + edgeWeight * searchFraction;
+                    double portalTravelTime = beforeEdge + edgeWeight * searchFraction;
+                    double portalDistance = settledDistanceMeters
+                            + edge.getDistance() * searchFraction;
                     PortalPath existing = bestPortals.get(portal.id());
-                    if (existing == null || portalDistance < existing.distanceMeters()) {
+                    if (existing == null
+                            || portalDistance < existing.distanceMeters()
+                            || (Double.compare(portalDistance, existing.distanceMeters()) == 0
+                            && portalTravelTime < existing.travelTimeSeconds())) {
                         List<Integer> edgeKeys = reconstruct(
                                 bestStates,
                                 predecessorStateKey,
@@ -194,27 +207,33 @@ final class EdgeKeyMultiTargetDijkstra {
                                 direction);
                         PortalPath path = new PortalPath(
                                 portal,
+                                portalTravelTime,
                                 portalDistance,
                                 edgeKeys,
                                 directedEdgeKey,
                                 directedFraction);
                         bestPortals.put(portal.id(), path);
-                        cursor.bestPortalDistance = Math.min(
-                                cursor.bestPortalDistance, portalDistance);
+                        cursor.bestPortalDistanceMeters = Math.min(
+                                cursor.bestPortalDistanceMeters, portalDistance);
                     }
                 }
             }
 
-            if (!traversalConstraint.allows(edge)) {
+            if (!traversalConstraint.allows(edge, reverse)) {
                 continue;
             }
-            double nextWeight = beforeEdge + edgeWeight;
+            double nextTravelTime = beforeEdge + edgeWeight;
+            double nextDistance = settledDistanceMeters + edge.getDistance();
             SettledState existing = bestStates.get(directedEdgeKey);
-            if (existing == null || nextWeight < existing.weight()) {
+            if (existing == null
+                    || nextDistance < existing.distanceMeters()
+                    || (Double.compare(nextDistance, existing.distanceMeters()) == 0
+                    && nextTravelTime < existing.travelTimeSeconds())) {
                 bestStates.put(directedEdgeKey, new SettledState(
-                        directedEdgeKey, nextWeight, predecessorStateKey));
+                        directedEdgeKey, nextTravelTime, nextDistance, predecessorStateKey));
                 queue.add(new QueueState(
-                        directedEdgeKey, edge.getEdge(), edge.getAdjNode(), nextWeight));
+                        directedEdgeKey, edge.getEdge(), edge.getAdjNode(),
+                        nextTravelTime, nextDistance));
             }
         }
     }
@@ -322,6 +341,7 @@ final class EdgeKeyMultiTargetDijkstra {
 
     record PortalPath(
             Portal portal,
+            double travelTimeSeconds,
             double distanceMeters,
             List<Integer> edgeKeys,
             int terminalEdgeKey,
@@ -342,17 +362,26 @@ final class EdgeKeyMultiTargetDijkstra {
     private record Projection(double fractionFromTraversalBase) {
     }
 
-    private record QueueState(int edgeKey, int edgeId, int node, double weight) {
+    private record QueueState(
+            int edgeKey,
+            int edgeId,
+            int node,
+            double travelTimeSeconds,
+            double distanceMeters) {
     }
 
-    private record SettledState(int edgeKey, double weight, int predecessorStateKey) {
+    private record SettledState(
+            int edgeKey,
+            double travelTimeSeconds,
+            double distanceMeters,
+            int predecessorStateKey) {
     }
 
     private static final class SearchCursor {
-        private double bestPortalDistance;
+        private double bestPortalDistanceMeters;
 
-        private SearchCursor(double bestPortalDistance) {
-            this.bestPortalDistance = bestPortalDistance;
+        private SearchCursor(double bestPortalDistanceMeters) {
+            this.bestPortalDistanceMeters = bestPortalDistanceMeters;
         }
     }
 }

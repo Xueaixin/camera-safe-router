@@ -49,7 +49,8 @@ class SixthRingRoutePlannerIntegrationTest {
         SixthRingProperties sixthRingProperties = new SixthRingProperties(
                 configuration.boundary().toString(),
                 false,
-                1_000,
+                50,
+                1000,
                 100,
                 100,
                 2_000_000,
@@ -66,15 +67,24 @@ class SixthRingRoutePlannerIntegrationTest {
                     appProperties,
                     graphManager,
                     new CameraJsonLoader(objectMapper, new CoordinateConverter()),
-                    new BlockedEdgeGenerator()).build(configuration.cameraJson());
+                    new BlockedEdgeGenerator(),
+                    sixthRingManager,
+                    sixthRingProperties).build(configuration.cameraJson());
+            System.out.println("PRODUCTION_CAMERA_SNAPSHOT radius=" + snapshot.safetyRadiusMeters()
+                    + " restricted=" + snapshot.restrictedCameraCount()
+                    + " outside=" + snapshot.outsideControlAreaCameraCount()
+                    + " matched=" + snapshot.matchedCameraCount()
+                    + " unmatched=" + snapshot.unmatchedCameraIds().size()
+                    + " highwayExempt=" + snapshot.highwayExemptCameraCount()
+                    + " blockedEdges=" + snapshot.blockedEdges().blockedEdgeCount());
             SixthRingRoutePlanner planner = new SixthRingRoutePlanner(
                     graphManager,
                     sixthRingManager,
                     new GraphHopperRoutingEngine(graphManager, appProperties),
                     sixthRingProperties);
             RouteSafetyValidator validator = new RouteSafetyValidator();
-            Point center = sixthRingManager.requireContext().boundary()
-                    .innerPolygon().getCentroid();
+            SixthRingBoundary boundary = sixthRingManager.requireContext().boundary();
+            Point center = boundary.controlledArea().getCentroid();
             List<String> signatures = new ArrayList<>();
 
             for (JsonNode fixture : fixtures.path("crossBoundaryRoutes")) {
@@ -94,11 +104,14 @@ class SixthRingRoutePlannerIntegrationTest {
                 assertThat(route.boundaryCrossing()).as(id + " portal").isNotNull();
                 assertThat(route.safeSegment()).as(id + " safe segment").isNotNull();
                 assertThat(route.referenceSegment()).as(id + " reference segment").isNotNull();
+                assertThat(route.externalHandoff() == null)
+                        .as(id + " handoff fields are paired")
+                        .isEqualTo(route.navigationHandoff() == null);
                 assertThat(route.distanceMeters()).as(id + " distance").isBetween(
                         fixture.path("minDistanceMeters").asDouble(),
                         fixture.path("maxDistanceMeters").asDouble());
-                assertThat(validator.validate(route.safeSegment().geometry(), snapshot).conflictCount())
-                        .as(id + " safe segment conflicts").isZero();
+                assertThat(validator.validate(route, snapshot).conflictCount())
+                        .as(id + " applicable camera conflicts").isZero();
                 assertThat(route.geometry()).as(id + " complete geometry").hasSizeGreaterThan(1);
                 if (fixture.has("maxReferenceJoinStepMeters")) {
                     List<Wgs84Coordinate> fullGeometry = route.geometry();
@@ -118,8 +131,30 @@ class SixthRingRoutePlannerIntegrationTest {
                 }
                 if (route.navigationHandoff() != null) {
                     Wgs84Coordinate handoff = route.navigationHandoff().coordinate();
+                    ExternalHandoffPoint externalHandoff = route.externalHandoff();
+                    assertThat(externalHandoff).as(id + " external handoff").isNotNull();
                     assertThat(route.navigationHandoff().boundaryClearanceMeters())
                             .as(id + " navigation handoff clearance").isPositive();
+                    assertThat(boundary.controlledArea().covers(
+                            boundary.controlledArea().getFactory().createPoint(
+                                    new org.locationtech.jts.geom.Coordinate(
+                                            handoff.lng(), handoff.lat()))))
+                            .as(id + " navigation handoff strictly outside").isFalse();
+                    assertThat(externalHandoff.coordinate())
+                            .as(id + " external handoff coordinate").isEqualTo(handoff);
+                    assertThat(externalHandoff.boundaryClearanceMeters())
+                            .as(id + " external handoff clearance")
+                            .isEqualTo(route.navigationHandoff().boundaryClearanceMeters());
+                    assertThat(externalHandoff.poiSearchRadiusMeters())
+                            .as(id + " dynamic POI radius")
+                            .isEqualTo(route.navigationHandoff().type()
+                                    == NavigationHandoffPoint.Type.HIGHWAY
+                                    ? 0
+                                    : (int) Math.floor(Math.min(
+                                            200,
+                                            Math.max(0,
+                                                    externalHandoff
+                                                            .boundaryClearanceMeters() - 25))));
                     assertThat(direction == SixthRingPortal.Direction.OUTBOUND
                             ? route.safeSegment().geometry().getLast()
                             : route.safeSegment().geometry().getFirst())
@@ -141,9 +176,32 @@ class SixthRingRoutePlannerIntegrationTest {
                             .as(id + " navigation handoff source segment")
                             .isEqualTo(fixture.path("navigationHandoffSegment").asText());
                 }
+                if (fixture.hasNonNull("navigationHandoffType")) {
+                    assertThat(route.navigationHandoff().type().name())
+                            .as(id + " navigation handoff type")
+                            .isEqualTo(fixture.path("navigationHandoffType").asText());
+                }
                 assertThat(quadrant(center, route.boundaryCrossing().crossing()))
                         .as(id + " selected quadrant")
                         .isEqualTo(fixture.path("quadrant").asText());
+                if (fixture.path("requiresHighwayMainline").asBoolean(false)) {
+                    List<String> highwayNames = RouteTraceSupport.edgeRuns(route.trace()).stream()
+                            .filter(run -> sixthRingManager.requireContext().roadClassification()
+                                    .isHighwayMainline(run.baseEdgeId()))
+                            .map(run -> route.trace().stream()
+                                    .filter(point -> point.originalEdgeKey()
+                                            == run.originalEdgeKey())
+                                    .map(RouteTracePoint::roadName)
+                                    .filter(name -> !name.isBlank())
+                                    .findFirst().orElse("<unnamed>"))
+                            .distinct()
+                            .toList();
+                    assertThat(highwayNames)
+                            .as(id + " uses a classified highway mainline")
+                            .isNotEmpty();
+                    System.out.println(
+                            "PRODUCTION_HIGHWAY_NAMES " + id + ":" + highwayNames);
+                }
                 signatures.add(id + ":" + route.boundaryCrossing().id()
                         + ":" + Math.round(route.distanceMeters()));
             }
@@ -163,7 +221,7 @@ class SixthRingRoutePlannerIntegrationTest {
                 assertThat(route.distanceMeters()).as(id + " distance").isBetween(
                         fixture.path("minDistanceMeters").asDouble(),
                         fixture.path("maxDistanceMeters").asDouble());
-                assertThat(validator.validate(route.safeSegment().geometry(), snapshot).conflictCount())
+                assertThat(validator.validate(route, snapshot).conflictCount())
                         .as(id + " conflicts").isZero();
                 signatures.add(id + ":INTERNAL:" + Math.round(route.distanceMeters()));
             }
@@ -216,8 +274,8 @@ class SixthRingRoutePlannerIntegrationTest {
                         configuration.pbf().toString(),
                         currentCache.toString(),
                         configuration.graphCache().toString(),
-                        RoutingProfileMode.COMPLIANT_DISTANCE_V1,
-                        30,
+                        RoutingProfileMode.COMPLIANT_TIME_V2,
+                        50,
                         2,
                         4,
                         Duration.ofSeconds(30),

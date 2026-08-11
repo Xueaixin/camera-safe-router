@@ -155,7 +155,7 @@ class RealRoutingSnapshotIntegrationTest {
         int graphEdges = graphManager.requireHopper().getBaseGraph().getEdges();
         int indexedEdges = graphManager.requireRoadEdgeIndex().indexedEdgeCount();
         boolean candidateProfile = properties.routing().profileMode()
-                == RoutingProfileMode.COMPLIANT_DISTANCE_V1;
+                != RoutingProfileMode.CURRENT;
         if (candidateProfile) {
             assertThat(graphManager.requireHopper().getProfile("car").hasTurnCosts()).isTrue();
             assertThat(graphManager.requireHopper().getEncodingManager().getTurnEncodedValues()).isNotEmpty();
@@ -465,9 +465,9 @@ class RealRoutingSnapshotIntegrationTest {
         Path currentCache = profileMode == RoutingProfileMode.CURRENT
                 ? graphCache
                 : graphCache.resolveSibling(graphCache.getFileName() + "-current-reference");
-        Path candidateCache = profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
-                ? graphCache
-                : graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference");
+        Path candidateCache = profileMode == RoutingProfileMode.CURRENT
+                ? graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference")
+                : graphCache;
         return new AppProperties(
                 new AppProperties.Routing(
                         pbf.toString(),

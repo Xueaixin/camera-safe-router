@@ -132,12 +132,16 @@ public final class CameraUpdateService {
             LOGGER.info("摄像头数据更新阶段开始 更新ID={} 阶段=构建路由快照", updateId);
             RoutingSnapshot candidate = snapshotBuilder.build(staged);
             LOGGER.info("摄像头数据更新阶段完成 更新ID={} 阶段=构建路由快照 "
-                            + "源记录数={} 保留记录数={} 匹配摄像头数={} "
-                            + "未匹配摄像头数={} 禁行边数={} 耗时毫秒={}",
+                            + "源记录数={} 保留记录数={} 受控摄像头数={} 界外解禁数={} "
+                            + "匹配摄像头数={} 仅命中高速豁免边数={} 未匹配摄像头数={} "
+                            + "禁行边数={} 耗时毫秒={}",
                     updateId,
                     candidate.cameraSnapshot().sourceRecordCount(),
                     candidate.cameraSnapshot().retainedRecordCount(),
+                    candidate.restrictedCameraCount(),
+                    candidate.outsideControlAreaCameraCount(),
                     candidate.matchedCameraCount(),
+                    candidate.highwayExemptCameraCount(),
                     candidate.unmatchedCameraIds().size(),
                     candidate.blockedEdges().blockedEdgeCount(),
                     elapsedMillis(phaseStarted));
@@ -194,8 +198,9 @@ public final class CameraUpdateService {
             throw new CameraUpdateRejectedException(
                     "摄像头源记录数低于配置的最小值: " + sourceCount);
         }
-        double matchRate = (double) candidate.matchedCameraCount()
-                / candidate.cameraSnapshot().retainedRecordCount();
+        double matchRate = candidate.restrictedCameraCount() == 0
+                ? 1.0
+                : (double) candidate.matchedCameraCount() / candidate.restrictedCameraCount();
         if (matchRate < update.minMatchRate()) {
             throw new CameraUpdateRejectedException(
                     "摄像头匹配率低于配置的最小值: " + matchRate);
@@ -243,6 +248,10 @@ public final class CameraUpdateService {
                 snapshot.cameraSnapshot().retainedRecordCount(),
                 snapshot.cameraSnapshot().outsideSixRingRecordCount(),
                 snapshot.cameraSnapshot().unrecognizedSixRingOutRecordCount(),
+                snapshot.restrictedCameraCount(),
+                snapshot.outsideControlAreaCameraCount(),
+                snapshot.cameraOutsideMarginMeters(),
+                snapshot.controlBoundaryVersion(),
                 snapshot.matchedCameraCount(),
                 snapshot.unmatchedCameraIds().size(),
                 snapshot.blockedEdges().blockedEdgeCount(),

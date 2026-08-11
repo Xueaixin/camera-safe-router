@@ -5,7 +5,7 @@ import {
   createNavigationHandoffPopup,
 } from './mapPopupContent';
 import { buildAmapNavigationUri } from './amapUri';
-import type { CameraView, OutputCoordinate } from '@/types/api';
+import type { CameraView, ControlledArea, OutputCoordinate } from '@/types/api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from '@/types/coordinate';
 import type {
   HandoffMarkerData,
@@ -30,6 +30,7 @@ export class MockMapAdapter implements MapAdapter {
   private resizeObserver: ResizeObserver | null = null;
   private route: OutputCoordinate[] = [];
   private cameras: CameraView[] = [];
+  private controlledArea: ControlledArea | null = null;
   private start: SelectedPlace | null = null;
   private end: SelectedPlace | null = null;
   private handoff: HandoffMarkerData | null = null;
@@ -136,6 +137,18 @@ export class MockMapAdapter implements MapAdapter {
     this.cameras = [];
     if (this.container) this.container.dataset.cameraCount = '0';
     if (this.popupKind === 'camera') this.closePopup();
+    this.draw();
+  }
+
+  setControlledArea(area: ControlledArea) {
+    this.controlledArea = area;
+    if (this.container) this.container.dataset.controlledArea = area.boundaryVersion;
+    this.draw();
+  }
+
+  clearControlledArea() {
+    this.controlledArea = null;
+    if (this.container) this.container.dataset.controlledArea = 'hidden';
     this.draw();
   }
 
@@ -275,6 +288,7 @@ export class MockMapAdapter implements MapAdapter {
       context.lineTo(width, y * 0.86 + height * 0.06);
       context.stroke();
     }
+    this.drawControlledArea(context, width, height);
     this.drawPath(context, this.route, width, height);
     this.cameras.forEach((camera) => this.drawPoint(context, camera, width, height, '#dc3f35', 5));
     if (this.pendingSelection) {
@@ -313,6 +327,30 @@ export class MockMapAdapter implements MapAdapter {
     context.lineCap = 'round';
     context.lineJoin = 'round';
     context.stroke();
+  }
+
+  private drawControlledArea(
+    context: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ) {
+    if (!this.controlledArea) return;
+    this.controlledArea.geometry.coordinates.forEach((polygon) => {
+      context.beginPath();
+      polygon.forEach((ring) => {
+        ring.forEach((point, index) => {
+          const [x, y] = this.project(point, width, height);
+          if (index === 0) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        });
+        context.closePath();
+      });
+      context.fillStyle = 'rgba(245, 158, 11, 0.09)';
+      context.fill('evenodd');
+      context.strokeStyle = '#b45309';
+      context.lineWidth = 2;
+      context.stroke();
+    });
   }
 
   private drawPoint(

@@ -29,6 +29,19 @@ const routeStore = useRouteStore();
 const locationStore = useLocationStore();
 const mapStore = useMapStore();
 const appMode = computed(() => (environment.useMockApi ? '模拟数据' : '实时服务'));
+const currentLocationStatus = computed(() => {
+  if (!pendingCurrentAsStart.value) return null;
+  if (locationStore.state === 'permission-denied')
+    return '定位权限被拒绝，请允许当前站点访问位置后重试';
+  if (locationStore.state === 'timeout') return '定位超时，请点击当前位置重试';
+  if (locationStore.state === 'unavailable')
+    return '浏览器无法提供位置，请检查系统定位或安全连接';
+  if (locationStore.browserLocation && !locationStore.isFresh)
+    return '当前位置已过期，正在重新获取';
+  if (locationStore.browserLocation && !locationStore.isAccurate)
+    return `当前精度约 ${Math.round(locationStore.browserLocation.accuracyMeters)} 米，正在等待精度提升`;
+  return '正在获取当前位置';
+});
 
 async function boot() {
   bootError.value = false;
@@ -56,7 +69,6 @@ function searchPlaces(keyword: string, signal?: AbortSignal) {
 }
 
 function requestLocation() {
-  if (!mapView.value) return;
   locationStore.startWatching((coordinate) => {
     if (!mapView.value) return Promise.reject(new Error('地图尚未加载'));
     return mapView.value.convertWgs84ToGcj02(coordinate);
@@ -109,6 +121,14 @@ watch(
   },
 );
 
+watch(
+  () => routeStore.start,
+  (start) => {
+    if (pendingCurrentAsStart.value && start?.source !== 'CURRENT_LOCATION')
+      pendingCurrentAsStart.value = false;
+  },
+);
+
 onMounted(() => void boot());
 onBeforeUnmount(() => {
   locationStore.stopWatching();
@@ -132,7 +152,11 @@ onBeforeUnmount(() => {
         </span>
       </header>
 
-      <RouteSearchPanel :search-places="searchPlaces" @use-current="useCurrentAsStart" />
+      <RouteSearchPanel
+        :search-places="searchPlaces"
+        :current-location-status="currentLocationStatus"
+        @use-current="useCurrentAsStart"
+      />
       <RouteSummarySheet />
     </aside>
 

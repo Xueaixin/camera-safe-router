@@ -12,6 +12,7 @@ import com.graphhopper.util.FetchMode;
 import com.graphhopper.util.PointList;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 final class RouteGeometryAssembler {
@@ -23,6 +24,7 @@ final class RouteGeometryAssembler {
             Weighting weighting,
             EdgeKeyMultiTargetDijkstra.PortalPath path,
             SixthRingPortal.Direction direction,
+            int baseEdgeCount,
             EnumEncodedValue<RoadClass> roadClass,
             BooleanEncodedValue roadClassLink,
             EnumEncodedValue<RoadEnvironment> roadEnvironment) {
@@ -61,6 +63,7 @@ final class RouteGeometryAssembler {
                     trace,
                     edgeSlice(edge, fromFraction, toFraction),
                     edge,
+                    baseEdgeCount,
                     roadClass,
                     roadClassLink,
                     roadEnvironment);
@@ -72,7 +75,10 @@ final class RouteGeometryAssembler {
         }
 
         Wgs84Coordinate crossing = path.portal().coordinate();
-        if (!geometry.isEmpty()) {
+        if (geometry.isEmpty()) {
+            geometry.add(crossing);
+            geometry.add(crossing);
+        } else {
             if (direction == SixthRingPortal.Direction.OUTBOUND) {
                 geometry.set(geometry.size() - 1, crossing);
             } else {
@@ -86,7 +92,8 @@ final class RouteGeometryAssembler {
                         point.roadName(),
                         point.roadClass(),
                         point.roadClassLink(),
-                        point.roadEnvironment()))
+                        point.roadEnvironment(),
+                        point.originalEdgeKey()))
                 .toList();
         return new TracedRouteLeg(
                 new RouteLeg(path.distanceMeters(), durationMillis, geometry),
@@ -100,6 +107,96 @@ final class RouteGeometryAssembler {
             appendDistinct(result, part);
         }
         return List.copyOf(result);
+    }
+
+    static PortalAnchoredRoute insertCrossing(
+            PortalAnchoredRoute anchoredRoute,
+            SixthRingPortal portal) {
+        EngineRoute route = anchoredRoute.route();
+        List<Wgs84Coordinate> geometry = new ArrayList<>(route.geometry());
+        if (geometry.contains(portal.crossing())) {
+            return anchoredRoute;
+        }
+        List<Integer> matchingSegments = java.util.stream.IntStream
+                .range(1, geometry.size())
+                .filter(index -> segmentUsesEdge(
+                        anchoredRoute.trace(), index, portal.edgeKey()))
+                .boxed()
+                .sorted(Comparator.comparingDouble(index -> GeoDistance.minimumMeters(
+                        portal.crossing(),
+                        List.of(geometry.get(index - 1), geometry.get(index)))))
+                .toList();
+        if (matchingSegments.isEmpty()) {
+            throw new IllegalStateException(
+                    "physical boundary crossing is not on the anchored route edge trace");
+        }
+        int insertionIndex = matchingSegments.getFirst();
+        double distance = GeoDistance.minimumMeters(
+                portal.crossing(),
+                List.of(geometry.get(insertionIndex - 1), geometry.get(insertionIndex)));
+        if (distance > 2) {
+            throw new IllegalStateException(
+                    "physical boundary crossing is too far from the anchored route geometry");
+        }
+        geometry.add(insertionIndex, portal.crossing());
+
+        RouteTracePoint template = anchoredRoute.trace().stream()
+                .filter(point -> point.originalEdgeKey() == portal.edgeKey())
+                .filter(point -> point.geometryIndex() == insertionIndex - 1
+                        || point.geometryIndex() == insertionIndex)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "physical boundary crossing edge metadata is missing"));
+        List<RouteTracePoint> trace = new ArrayList<>(anchoredRoute.trace().size() + 1);
+        boolean inserted = false;
+        for (RouteTracePoint point : anchoredRoute.trace()) {
+            if (!inserted && point.geometryIndex() >= insertionIndex) {
+                trace.add(new RouteTracePoint(
+                        insertionIndex,
+                        portal.crossing(),
+                        template.roadName(),
+                        template.roadClass(),
+                        template.roadClassLink(),
+                        template.roadEnvironment(),
+                        template.originalEdgeKey()));
+                inserted = true;
+            }
+            trace.add(RouteTraceSupport.withGeometryIndex(
+                    point,
+                    point.geometryIndex() >= insertionIndex
+                            ? point.geometryIndex() + 1 : point.geometryIndex()));
+        }
+        if (!inserted) {
+            trace.add(new RouteTracePoint(
+                    insertionIndex,
+                    portal.crossing(),
+                    template.roadName(),
+                    template.roadClass(),
+                    template.roadClassLink(),
+                    template.roadEnvironment(),
+                    template.originalEdgeKey()));
+        }
+        EngineRoute updated = new EngineRoute(
+                route.distanceMeters(),
+                route.durationMillis(),
+                geometry,
+                trace,
+                route.searchEdgeChecks(),
+                route.virtualEdgeChecks(),
+                route.blockedRejections());
+        return new PortalAnchoredRoute(updated, trace);
+    }
+
+    private static boolean segmentUsesEdge(
+            List<RouteTracePoint> trace,
+            int geometryIndex,
+            int edgeKey) {
+        boolean previous = trace.stream().anyMatch(point ->
+                point.geometryIndex() == geometryIndex - 1
+                        && point.originalEdgeKey() == edgeKey);
+        return previous && trace.stream().anyMatch(point ->
+                point.geometryIndex() == geometryIndex
+                        && point.originalEdgeKey() == edgeKey);
     }
 
     private static List<Wgs84Coordinate> edgeSlice(
@@ -171,6 +268,7 @@ final class RouteGeometryAssembler {
             List<RouteTracePoint> trace,
             List<Wgs84Coordinate> points,
             EdgeIteratorState edge,
+            int baseEdgeCount,
             EnumEncodedValue<RoadClass> roadClass,
             BooleanEncodedValue roadClassLink,
             EnumEncodedValue<RoadEnvironment> roadEnvironment) {
@@ -188,7 +286,8 @@ final class RouteGeometryAssembler {
                     edge.getName(),
                     edge.get(roadClass),
                     edge.get(roadClassLink),
-                    edge.get(roadEnvironment)));
+                    edge.get(roadEnvironment),
+                    OriginalEdgeKey.resolve(edge, baseEdgeCount)));
         }
     }
 

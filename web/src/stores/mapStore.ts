@@ -1,7 +1,7 @@
 import { ref } from 'vue';
 import { defineStore } from 'pinia';
 
-import type { CameraSnapshotStatus, CameraView } from '@/types/api';
+import type { CameraSnapshotStatus, CameraView, ControlledArea } from '@/types/api';
 
 export const useMapStore = defineStore('map', () => {
   const camerasVisible = ref(true);
@@ -10,9 +10,16 @@ export const useMapStore = defineStore('map', () => {
   const camerasError = ref<string | null>(null);
   const snapshot = ref<CameraSnapshotStatus | null>(null);
   const snapshotError = ref(false);
+  const controlledAreaVisible = ref(true);
+  const controlledArea = ref<ControlledArea | null>(null);
+  const controlledAreaError = ref(false);
 
   function toggleCameras() {
     camerasVisible.value = !camerasVisible.value;
+  }
+
+  function toggleControlledArea() {
+    controlledAreaVisible.value = !controlledAreaVisible.value;
   }
 
   return {
@@ -22,6 +29,10 @@ export const useMapStore = defineStore('map', () => {
     camerasError,
     snapshot,
     snapshotError,
+    controlledAreaVisible,
+    controlledArea,
+    controlledAreaError,
     toggleCameras,
+    toggleControlledArea,
   };
 });

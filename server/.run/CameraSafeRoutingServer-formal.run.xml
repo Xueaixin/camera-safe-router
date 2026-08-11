@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="CameraSafeRoutingServer (正式数据)" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="cn.camera.safe.CameraSafeRoutingApplication" />
+    <module name="camera-safe-routing-server" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <!-- 正式模式：全部使用 application.yml 默认值，数据根为当前盘 \camera-safe-routing-data，跨设备无需修改 -->
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

@@ -98,6 +98,31 @@ test('allowed geolocation renders a display location and centers only on command
   await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue('当前位置');
 });
 
+test('start-field current location requests geolocation without using the map toolbar first', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
+  await context.setGeolocation({ longitude: 116.39, latitude: 39.9, accuracy: 18.2 });
+  await page.goto('/');
+  await page.getByRole('combobox', { name: '搜索起点' }).click();
+  await page.getByTestId('use-current-option').click();
+  await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue('当前位置');
+});
+
+test('start-field current location exposes permission failure next to the input', async ({
+  page,
+  context,
+}) => {
+  await context.clearPermissions();
+  await page.goto('/');
+  await page.getByRole('combobox', { name: '搜索起点' }).click();
+  await page.getByTestId('use-current-option').click();
+  await expect(page.locator('.place-input__status')).toContainText('定位权限被拒绝', {
+    timeout: 12_000,
+  });
+});
+
 test('denied geolocation displays a recoverable permission state', async ({ page, context }) => {
   await context.clearPermissions();
   await page.goto('/');

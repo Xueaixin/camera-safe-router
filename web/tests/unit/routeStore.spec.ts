@@ -1,7 +1,12 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { buildMockCrossBoundaryRoute, buildMockRoute, mockApiError } from '@/mocks/fixtures';
+import {
+  buildMockCrossBoundaryRoute,
+  buildMockRoute,
+  mockApiError,
+  MOCK_CONTROLLED_AREA,
+} from '@/mocks/fixtures';
 import type { ApiClient } from '@/services/apiClient';
 import { ApiClientError } from '@/services/errors';
 import { useRouteStore } from '@/stores/routeStore';
@@ -42,9 +47,14 @@ function clientWith(
       snapshotVersion: 'fixture-camera-v1',
       blockedEdgeVersion: 'fixture-blocked-v1',
       cameraCount: 0,
+      sourceCameraCount: 0,
+      outsideControlAreaCameraCount: 0,
+      cameraOutsideMarginMeters: 50,
+      controlBoundaryVersion: 'fixture-controlled-area-v1',
       safetyRadiusMeters: 30,
       loadedAt: '2026-07-30T00:00:00Z',
     }),
+    getControlledArea: async () => MOCK_CONTROLLED_AREA,
     health: async (): Promise<HealthResponse> => ({ status: 'UP' }),
     readiness: async (): Promise<ReadinessResponse> => ({
       status: 'READY',

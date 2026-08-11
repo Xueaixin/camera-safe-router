@@ -1,6 +1,7 @@
 import type {
   BoundaryCrossing,
   CameraView,
+  ControlledArea,
   ExternalHandoff,
   NavigationHandoff,
   OutputCoordinate,
@@ -53,6 +54,8 @@ export interface MapAdapter {
   fitRoute(geometry: OutputCoordinate[]): void;
   setCameras(cameras: CameraView[]): void;
   clearCameras(): void;
+  setControlledArea(area: ControlledArea): void;
+  clearControlledArea(): void;
   setCurrentLocation(location: DisplayLocation | null): void;
   centerOn(coordinate: Coordinate): void;
   getViewport(): MapViewport;

@@ -32,7 +32,12 @@ public final class RoutingSnapshotStore {
                         + "|graph=" + snapshot.graphFingerprint()
                         + "|radius=" + snapshot.safetyRadiusMeters()
                         + "|retained=" + snapshot.cameraSnapshot().retainedRecordCount()
+                        + "|restricted=" + snapshot.restrictedCameraCount()
+                        + "|outside-control=" + snapshot.outsideControlAreaCameraCount()
+                        + "|boundary=" + snapshot.controlBoundaryVersion()
+                        + "|outside-margin=" + snapshot.cameraOutsideMarginMeters()
                         + "|matched=" + snapshot.matchedCameraCount()
+                        + "|highway-exempt=" + snapshot.highwayExemptCameraCount()
                         + "|blocked=" + snapshot.blockedEdges().blockedEdgeVersion());
         Path target = directory.resolve("routing-snapshot-" + contentFingerprint + ".json");
         if (Files.isRegularFile(target)) {
@@ -48,11 +53,16 @@ public final class RoutingSnapshotStore {
                 snapshot.cameraSnapshot().outsideSixRingRecordCount(),
                 snapshot.cameraSnapshot().unrecognizedSixRingOutRecordCount(),
                 snapshot.cameraSnapshot().cameras().size(),
+                snapshot.restrictedCameraCount(),
+                snapshot.outsideControlAreaCameraCount(),
+                snapshot.controlBoundaryVersion(),
+                snapshot.cameraOutsideMarginMeters(),
                 snapshot.blockedEdges().blockedEdgeVersion(),
                 snapshot.graphFingerprint(),
                 snapshot.safetyRadiusMeters(),
                 snapshot.blockedEdges().blockedEdgeCount(),
                 snapshot.matchedCameraCount(),
+                snapshot.highwayExemptCameraCount(),
                 snapshot.unmatchedCameraIds(),
                 snapshot.blockedEdges().blockedForward().stream().boxed().toList(),
                 snapshot.blockedEdges().blockedReverse().stream().boxed().toList());
@@ -105,11 +115,16 @@ public final class RoutingSnapshotStore {
             int cameraOutsideSixRingRecordCount,
             int cameraUnrecognizedSixRingOutRecordCount,
             int cameraCount,
+            int restrictedCameraCount,
+            int outsideControlAreaCameraCount,
+            String controlBoundaryVersion,
+            double cameraOutsideMarginMeters,
             String blockedEdgeVersion,
             String graphFingerprint,
             double safetyRadiusMeters,
             int blockedEdgeCount,
             int matchedCameraCount,
+            int highwayExemptCameraCount,
             List<String> unmatchedCameraIds,
             List<Integer> blockedForwardEdgeIds,
             List<Integer> blockedReverseEdgeIds) {

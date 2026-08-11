@@ -3,6 +3,7 @@ import {
   buildMockRoute,
   mockApiError,
   MOCK_CAMERA_PAGE,
+  MOCK_CONTROLLED_AREA,
   MOCK_SNAPSHOT,
 } from './fixtures';
 import type { ApiClient } from '@/services/apiClient';
@@ -10,12 +11,14 @@ import { ApiClientError } from '@/services/errors';
 import {
   parseCameraPage,
   parseCameraSnapshotStatus,
+  parseControlledArea,
   parseRouteResponse,
 } from '@/services/protocol';
 import type {
   BoundingBox,
   CameraPage,
   CameraSnapshotStatus,
+  ControlledArea,
   HealthResponse,
   ReadinessResponse,
   RouteRequest,
@@ -151,6 +154,11 @@ export class MockApiClient implements ApiClient {
       throwBusiness(503, 'CAMERA_SNAPSHOT_NOT_READY');
     }
     return parseCameraSnapshotStatus(MOCK_SNAPSHOT);
+  }
+
+  async getControlledArea(signal?: AbortSignal): Promise<ControlledArea> {
+    await wait(Math.min(this.delayMs, 150), signal);
+    return parseControlledArea(MOCK_CONTROLLED_AREA);
   }
 
   async health(signal?: AbortSignal): Promise<HealthResponse> {

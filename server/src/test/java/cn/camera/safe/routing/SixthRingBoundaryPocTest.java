@@ -183,7 +183,6 @@ class SixthRingBoundaryPocTest {
                     weighting,
                     new SixthRingBoundary(
                             boundary.innerPolygon(),
-                            boundary.outerPolygon(),
                             graphManager.requireGraphFingerprint()));
             BoundaryCrossingScan outboundScan = adaptScan(topology.outbound());
             BoundaryCrossingScan inboundScan = adaptScan(topology.inbound());
@@ -243,9 +242,9 @@ class SixthRingBoundaryPocTest {
         Path currentCache = profileMode == RoutingProfileMode.CURRENT
                 ? graphCache
                 : graphCache.resolveSibling(graphCache.getFileName() + "-current-reference");
-        Path candidateCache = profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
-                ? graphCache
-                : graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference");
+        Path candidateCache = profileMode == RoutingProfileMode.CURRENT
+                ? graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference")
+                : graphCache;
         return new AppProperties(
                 new AppProperties.Routing(
                         pbf.toString(), currentCache.toString(), candidateCache.toString(), profileMode,

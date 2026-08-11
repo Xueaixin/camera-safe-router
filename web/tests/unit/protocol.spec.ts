@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildMockRoute } from '@/mocks/fixtures';
-import { parseRouteResponse, ProtocolError } from '@/services/protocol';
+import { buildMockRoute, MOCK_CONTROLLED_AREA } from '@/mocks/fixtures';
+import { parseControlledArea, parseRouteResponse, ProtocolError } from '@/services/protocol';
 import type { RouteRequest } from '@/types/api';
 
 const request: RouteRequest = {
@@ -38,12 +38,13 @@ describe('route response validation', () => {
         gcj02: { lng: 116.411, lat: 39.901 },
         boundaryClearanceMeters: 320,
         roadName: '普通道路',
+        type: 'ORDINARY_ROAD',
       },
       externalHandoff: {
-        wgs84: { lng: 116.41, lat: 39.9 },
-        gcj02: { lng: 116.416, lat: 39.901 },
-        boundaryClearanceMeters: 260,
-        poiSearchRadiusMeters: 200,
+        wgs84: { lng: 116.405, lat: 39.9 },
+        gcj02: { lng: 116.411, lat: 39.901 },
+        boundaryClearanceMeters: 162,
+        poiSearchRadiusMeters: 137,
       },
       safeSegment: {
         distanceMeters: 4000,
@@ -59,10 +60,33 @@ describe('route response validation', () => {
 
     expect(response.boundaryCrossing?.portalId).toBe('P0001');
     expect(response.navigationHandoff?.roadName).toBe('普通道路');
-    expect(response.externalHandoff?.poiSearchRadiusMeters).toBe(200);
+    expect(response.externalHandoff?.gcj02).toEqual(response.navigationHandoff?.gcj02);
+    expect(response.externalHandoff?.poiSearchRadiusMeters).toBe(137);
   });
 
-  it('requires an external handoff for cross-boundary routes', () => {
+  it('accepts a cross-boundary route when both handoffs are unavailable', () => {
+    const base = buildMockRoute(request);
+    const response = parseRouteResponse({
+      ...base,
+      planningMode: 'CROSS_BOUNDARY_OUTBOUND',
+      boundaryDirection: 'OUTBOUND',
+      boundaryCrossing: {
+        portalId: 'P0001',
+        direction: 'OUTBOUND',
+        boundaryRole: 'OUTER_EXIT',
+        wgs84: { lng: 116.4, lat: 39.9 },
+        gcj02: { lng: 116.406, lat: 39.901 },
+      },
+      navigationHandoff: null,
+      externalHandoff: null,
+      referenceSegment: base.safeSegment,
+    });
+
+    expect(response.navigationHandoff).toBeNull();
+    expect(response.externalHandoff).toBeNull();
+  });
+
+  it('rejects a cross-boundary route with only one handoff', () => {
     const base = buildMockRoute(request);
     expect(() =>
       parseRouteResponse({
@@ -76,7 +100,54 @@ describe('route response validation', () => {
           wgs84: { lng: 116.4, lat: 39.9 },
           gcj02: { lng: 116.406, lat: 39.901 },
         },
+        navigationHandoff: {
+          wgs84: { lng: 116.405, lat: 39.9 },
+          gcj02: { lng: 116.411, lat: 39.901 },
+          boundaryClearanceMeters: 162,
+          roadName: '普通道路',
+          type: 'ORDINARY_ROAD',
+        },
+        externalHandoff: null,
         referenceSegment: base.safeSegment,
+      }),
+    ).toThrow('路线规划模式与分段结构不一致');
+  });
+
+  it('rejects handoff coordinates that do not match', () => {
+    const base = buildMockRoute(request);
+    expect(() =>
+      parseRouteResponse({
+        ...base,
+        planningMode: 'CROSS_BOUNDARY_OUTBOUND',
+        boundaryDirection: 'OUTBOUND',
+        boundaryCrossing: {
+          portalId: 'P0001',
+          direction: 'OUTBOUND',
+          boundaryRole: 'OUTER_EXIT',
+          wgs84: { lng: 116.4, lat: 39.9 },
+          gcj02: { lng: 116.406, lat: 39.901 },
+        },
+        navigationHandoff: {
+          wgs84: { lng: 116.405, lat: 39.9 },
+          gcj02: { lng: 116.411, lat: 39.901 },
+          boundaryClearanceMeters: 162,
+          roadName: '普通道路',
+          type: 'ORDINARY_ROAD',
+        },
+        externalHandoff: {
+          wgs84: { lng: 116.406, lat: 39.9 },
+          gcj02: { lng: 116.412, lat: 39.901 },
+          boundaryClearanceMeters: 162,
+          poiSearchRadiusMeters: 137,
+        },
+        safeSegment: {
+          ...base.safeSegment!,
+          geometry: [base.geometry[0], { lng: 116.411, lat: 39.901 }],
+        },
+        referenceSegment: {
+          ...base.safeSegment!,
+          geometry: [{ lng: 116.411, lat: 39.901 }, base.geometry.at(-1)!],
+        },
       }),
     ).toThrow('路线规划模式与分段结构不一致');
   });
@@ -118,5 +189,14 @@ describe('route response validation', () => {
     expect(() =>
       parseRouteResponse({ ...buildMockRoute(request), geometry: [{ lng: 116.397, lat: 39.908 }] }),
     ).toThrow('路线几何点不足');
+  });
+
+  it('parses a closed GCJ02 controlled-area multipolygon', () => {
+    const area = parseControlledArea(MOCK_CONTROLLED_AREA);
+
+    expect(area.coordinateSystem).toBe('GCJ02');
+    expect(area.geometry.type).toBe('MultiPolygon');
+    expect(area.geometry.coordinates[0]?.[0]).toHaveLength(5);
+    expect(area.cameraOutsideMarginMeters).toBe(50);
   });
 });

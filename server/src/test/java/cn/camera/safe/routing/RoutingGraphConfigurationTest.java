@@ -31,6 +31,8 @@ class RoutingGraphConfigurationTest {
 
         assertThat(configuration.cachePath()).isEqualTo(currentCache.toAbsolutePath());
         assertThat(configuration.requiresCompatibilityMetadata()).isFalse();
+        assertThat(configuration.encodedValues())
+                .isEqualTo(RoutingGraphConfiguration.LEGACY_ENCODED_VALUES);
         assertThat(profile.hasTurnCosts()).isFalse();
         assertThat(profile.getCustomModel().getDistanceInfluence()).isEqualTo(90.0);
     }
@@ -50,6 +52,8 @@ class RoutingGraphConfigurationTest {
 
         assertThat(candidate.cachePath()).isEqualTo(candidateCache.toAbsolutePath());
         assertThat(candidate.requiresCompatibilityMetadata()).isTrue();
+        assertThat(candidate.encodedValues())
+                .isEqualTo(RoutingGraphConfiguration.LEGACY_ENCODED_VALUES);
         assertThat(candidate.compatibilityHash()).matches("[0-9a-f]{64}");
         assertThat(candidate.compatibilityHash()).isNotEqualTo(current.compatibilityHash());
         assertThat(profile.hasTurnCosts()).isTrue();
@@ -69,11 +73,36 @@ class RoutingGraphConfigurationTest {
     }
 
     @Test
+    void timeProfileUsesTravelTimeBeforeDistance() {
+        Path currentCache = temporaryDirectory.resolve("current");
+        Path candidateCache = temporaryDirectory.resolve("candidate");
+
+        RoutingGraphConfiguration distance = RoutingGraphConfiguration.resolve(
+                routing(RoutingProfileMode.COMPLIANT_DISTANCE_V1, currentCache, candidateCache));
+        RoutingGraphConfiguration time = RoutingGraphConfiguration.resolve(
+                routing(RoutingProfileMode.COMPLIANT_TIME_V2, currentCache, candidateCache));
+
+        assertThat(time.createProfile().getCustomModel().getDistanceInfluence()).isEqualTo(90.0);
+        assertThat(time.createProfile().hasTurnCosts()).isTrue();
+        assertThat(time.cachePath()).isEqualTo(candidateCache.toAbsolutePath());
+        assertThat(time.requiresCompatibilityMetadata()).isTrue();
+        assertThat(time.compatibilityHash()).isNotEqualTo(distance.compatibilityHash());
+        assertThat(time.encodedValues())
+                .isEqualTo(RoutingGraphConfiguration.TIME_V2_ENCODED_VALUES)
+                .contains("osm_way_id")
+                .contains(RoadIdentityEncodedValues.SIXTH_RING_MAINLINE);
+    }
+
+    @Test
     void rejectsCandidateCacheThatAliasesCurrentCache() {
         Path cache = temporaryDirectory.resolve("same");
 
         assertThatThrownBy(() -> RoutingGraphConfiguration.resolve(
                 routing(RoutingProfileMode.COMPLIANT_DISTANCE_V1, cache, cache)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("不能与当前路由缓存目录相同");
+        assertThatThrownBy(() -> RoutingGraphConfiguration.resolve(
+                routing(RoutingProfileMode.COMPLIANT_TIME_V2, cache, cache)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("不能与当前路由缓存目录相同");
     }
@@ -84,7 +113,7 @@ class RoutingGraphConfigurationTest {
         Files.createDirectories(cache);
         RoutingGraphConfiguration configuration = RoutingGraphConfiguration.resolve(
                 routing(
-                        RoutingProfileMode.COMPLIANT_DISTANCE_V1,
+                        RoutingProfileMode.COMPLIANT_TIME_V2,
                         temporaryDirectory.resolve("current"),
                         cache));
 

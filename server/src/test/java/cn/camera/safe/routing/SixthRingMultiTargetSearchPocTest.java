@@ -383,9 +383,9 @@ class SixthRingMultiTargetSearchPocTest {
         Path currentCache = profileMode == RoutingProfileMode.CURRENT
                 ? graphCache
                 : graphCache.resolveSibling(graphCache.getFileName() + "-current-reference");
-        Path candidateCache = profileMode == RoutingProfileMode.COMPLIANT_DISTANCE_V1
-                ? graphCache
-                : graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference");
+        Path candidateCache = profileMode == RoutingProfileMode.CURRENT
+                ? graphCache.resolveSibling(graphCache.getFileName() + "-candidate-reference")
+                : graphCache;
         return new AppProperties(
                 new AppProperties.Routing(
                         pbf.toString(), currentCache.toString(), candidateCache.toString(), profileMode,

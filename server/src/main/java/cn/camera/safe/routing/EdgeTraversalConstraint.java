@@ -8,7 +8,18 @@ public interface EdgeTraversalConstraint {
 
     boolean allows(EdgeIteratorState edge, double fractionFromBase);
 
+    default boolean allows(
+            EdgeIteratorState edge,
+            boolean reverse,
+            double fractionFromBase) {
+        return allows(edge, fractionFromBase);
+    }
+
     default boolean allows(EdgeIteratorState edge) {
         return allows(edge, 1.0);
+    }
+
+    default boolean allows(EdgeIteratorState edge, boolean reverse) {
+        return allows(edge, reverse, 1.0);
     }
 }
