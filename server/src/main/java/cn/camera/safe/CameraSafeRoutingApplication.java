@@ -12,6 +12,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 public class CameraSafeRoutingApplication {
     public static void main(String[] args) {
+        if (args.length > 0
+                && ("graph-build".equals(args[0])
+                        || "graph-check".equals(args[0])
+                        || "boundary-generate".equals(args[0]))) {
+            cn.camera.safe.cli.RoutingDataTool.main(args);
+            return;
+        }
         SpringApplication.run(CameraSafeRoutingApplication.class, args);
     }
 }
