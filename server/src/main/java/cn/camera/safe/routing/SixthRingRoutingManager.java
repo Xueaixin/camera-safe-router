@@ -70,13 +70,22 @@ public final class SixthRingRoutingManager {
             }
             BooleanEncodedValue carAccess = hopper.getEncodingManager()
                     .getBooleanEncodedValue("car_access");
+            LOGGER.info("六环拓扑加载 开始 边界版本={}", loaded.boundary().version());
+            long topologyStarted = System.nanoTime();
             SixthRingPortalTopology topology = topologyBuilder.build(
                     hopper.getBaseGraph(), carAccess, profileWeighting, loaded.boundary());
+            LOGGER.info("六环通行口拓扑完成 出环={} 入环={} 耗时毫秒={}",
+                    topology.outbound().portals().size(),
+                    topology.inbound().portals().size(),
+                    (System.nanoTime() - topologyStarted) / 1_000_000);
             if (topology.outbound().portals().isEmpty() || topology.inbound().portals().isEmpty()) {
                 throw new IllegalStateException("六环有向通行口拓扑为空");
             }
 
             RoutingProfileMode profileMode = graphManager.requireRoutingProfileMode();
+            LOGGER.info("道路分类 开始 路由模式={} 边数={}",
+                    profileMode, hopper.getBaseGraph().getEdges());
+            long classifyStarted = System.nanoTime();
             TollBoothSourceData tollBoothSourceData = profileMode == RoutingProfileMode.COMPLIANT_TIME_V2
                     ? tollBoothSourceParser.parse(graphManager.requireSourcePbfPath())
                     : null;
@@ -94,6 +103,7 @@ public final class SixthRingRoutingManager {
                             profileWeighting,
                             tollBoothSourceData)
                     : null;
+            LOGGER.info("道路分类完成 耗时毫秒={}", (System.nanoTime() - classifyStarted) / 1_000_000);
             RoadClassificationAudit roadAudit = roadClassification == null
                     ? null : roadClassification.audit();
             if (roadAudit != null) {
@@ -108,8 +118,13 @@ public final class SixthRingRoutingManager {
             RoadClassificationIndex roadClassificationIndex = roadClassification == null
                     ? RoadClassificationIndex.empty(graphManager.requireGraphFingerprint())
                     : roadClassification.index();
+            long releaseStarted = System.nanoTime();
             ControlReleaseTopology releaseTopology = releaseTopologyBuilder.build(
                     hopper.getBaseGraph(), carAccess, topology, roadClassificationIndex);
+            LOGGER.info("控制释放点拓扑完成 出界={} 入界={} 耗时毫秒={}",
+                    releaseTopology.outbound().size(),
+                    releaseTopology.inbound().size(),
+                    (System.nanoTime() - releaseStarted) / 1_000_000);
             context = new SixthRingRoutingContext(
                     loaded.boundary(), topology, releaseTopology, profileWeighting,
                     new TimeFirstLegalityWeighting(profileWeighting),

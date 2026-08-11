@@ -14,6 +14,8 @@ import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -28,6 +30,7 @@ import java.util.Set;
 
 final class TollCorridorTopologyBuilder {
     private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
+    private static final Logger LOGGER = LoggerFactory.getLogger(TollCorridorTopologyBuilder.class);
     private static final double SOURCE_ENVELOPE_MARGIN_DEGREES = 0.15;
     private static final double GRAPH_NODE_MATCH_METERS = 3;
     private static final double GRID_SIZE_DEGREES = 0.00005;
@@ -59,6 +62,13 @@ final class TollCorridorTopologyBuilder {
         if (mapped.isEmpty()) {
             return TollCorridorTopology.empty(sourceData.tollBooths().size());
         }
+        LOGGER.info("收费站走廊构建开始 附近节点={} 已映射={}",
+                nearbySources.size(), mapped.size());
+        int totalMapped = mapped.size();
+        int progressStep = Math.max(1, totalMapped / 4);
+        int processed = 0;
+        int candidateEntry = 0;
+        int candidateExit = 0;
 
         List<CandidateCorridor> candidates = new ArrayList<>();
         Set<Long> relatedTollBooths = new HashSet<>();
@@ -109,6 +119,15 @@ final class TollCorridorTopologyBuilder {
                             tollBooth, mainlineToToll, tollToOutside.getFirst()));
                     resolvedTollBooths.add(tollBooth.source().osmNodeId());
                 }
+            }
+            processed++;
+            candidateEntry = (int) candidates.stream()
+                    .filter(value -> value.role == TollCorridorTopology.Role.ENTRY)
+                    .count();
+            candidateExit = candidates.size() - candidateEntry;
+            if (processed % progressStep == 0 || processed == totalMapped) {
+                LOGGER.info("收费站走廊构建中 已处理={}/{} 入口候选={} 出口候选={}",
+                        processed, totalMapped, candidateEntry, candidateExit);
             }
         }
 

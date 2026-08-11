@@ -17,6 +17,8 @@ import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LineString;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -31,6 +33,7 @@ import java.util.Set;
 
 final class RoadClassifier {
     private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
+    private static final Logger LOGGER = LoggerFactory.getLogger(RoadClassifier.class);
 
     private RoadClassifier() {
     }
@@ -98,6 +101,7 @@ final class RoadClassifier {
             sixthRingInterior = sixthRingArea;
         }
 
+        LOGGER.info("道路分类 全边分区开始 边数={}", graph.getEdges());
         AllEdgesIterator edges = graph.getAllEdges();
         while (edges.next()) {
             PointList points = edges.fetchWayGeometry(FetchMode.ALL);
@@ -157,7 +161,13 @@ final class RoadClassifier {
                 tongzhouMotorwayDrivableDirections += (forward ? 1 : 0) + (reverse ? 1 : 0);
             }
         }
+        LOGGER.info("道路分类 全边分区完成 六环主路边={} 通州高速主路边={} 环内禁行高速边={} 匝道边={}",
+                sixthRingMainlineEdgeIds.cardinality(),
+                tongzhouHighwayMainlineEdges.cardinality(),
+                forbiddenSixthInteriorHighwayEdges.cardinality(),
+                motorwayLinkEdges.cardinality());
 
+        LOGGER.info("道路分类 连接器分类开始");
         ConnectorClassification connectors = classifyConnectors(
                 graph,
                 controlledArea,
@@ -165,6 +175,10 @@ final class RoadClassifier {
                 allHighwayMainlineEdges,
                 sixthRingMainlineEdgeIds,
                 cameraExemptMainlineEdges);
+        LOGGER.info("道路分类 连接器分类完成 释放连接器={} 六环出口key={} 通州连接器={}",
+                connectors.releasedConnectorEdges().cardinality(),
+                connectors.sixthExitConnectorEdgeKeys().cardinality(),
+                connectors.tongzhouHighwayConnectorEdges().cardinality());
         RoadClassificationAudit audit = new RoadClassificationAudit(
                 sixthRingRelationEdges,
                 sixthRingMainlineEdges,
@@ -201,6 +215,10 @@ final class RoadClassifier {
                         sixthRingArea,
                         baseClassification,
                         tollBoothSourceData);
+        LOGGER.info("道路分类 收费站走廊构建完成 入口={} 出口={}",
+                tollCorridors.audit().entryCorridors(),
+                tollCorridors.audit().exitCorridors());
+        LOGGER.info("道路分类 互转走廊构建开始");
         HighwayInterchangeTopology interchangeTopology =
                 weighting == null || tollBoothSourceData == null
                         ? HighwayInterchangeTopology.empty()
@@ -214,6 +232,9 @@ final class RoadClassifier {
                                 baseClassification,
                                 tollBoothSourceData,
                                 tollCorridors);
+        LOGGER.info("道路分类 互转走廊构建完成 R->H-T={} H-T->R={}",
+                interchangeTopology.audit().rToHtCorridors(),
+                interchangeTopology.audit().htToRCorridors());
         BitSet releasedConnectorEdges = (BitSet) connectors.releasedConnectorEdges().clone();
         releasedConnectorEdges.or(tollCorridors.baseEdges());
         BitSet sixthExitConnectorEdgeKeys = tollCorridors.corridors().isEmpty()

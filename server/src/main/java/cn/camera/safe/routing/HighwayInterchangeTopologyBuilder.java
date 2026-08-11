@@ -10,6 +10,8 @@ import com.graphhopper.util.EdgeIterator;
 import com.graphhopper.util.EdgeIteratorState;
 import com.graphhopper.util.GHUtility;
 import org.locationtech.jts.geom.Geometry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -35,6 +37,7 @@ import java.util.Set;
 final class HighwayInterchangeTopologyBuilder {
     private static final double MAX_CHAIN_DISTANCE_METERS = 3_000;
     private static final int MAX_SEARCH_STATES = 50_000;
+    private static final Logger LOGGER = LoggerFactory.getLogger(HighwayInterchangeTopologyBuilder.class);
 
     HighwayInterchangeTopology build(
             BaseGraph graph,
@@ -126,6 +129,8 @@ final class HighwayInterchangeTopologyBuilder {
         int candidateComponents = 0;
         int[] searchStates = {0};
 
+        LOGGER.info("互转走廊构建开始 link分量={} 收费节点={}",
+                componentNodes.size(), tollGraphNodes.size());
         for (Map.Entry<Integer, Set<Integer>> entry : componentNodes.entrySet()) {
             Set<Integer> nodes = entry.getValue();
             boolean touchesRing = nodes.stream()
@@ -178,6 +183,12 @@ final class HighwayInterchangeTopologyBuilder {
             if (found.isEmpty()) {
                 unresolvedComponents++;
             }
+            int componentRToHt = (int) found.stream()
+                    .filter(chain -> chain.role() == HighwayInterchangeTopology.Role.R_TO_HT)
+                    .count();
+            LOGGER.info("互转走廊 候选分量 #{}, 节点数={}, 生成R->H-T={} H-T->R={}",
+                    candidateComponents, nodes.size(),
+                    componentRToHt, found.size() - componentRToHt);
         }
 
         for (CandidateChain chain : unique.keySet()) {
