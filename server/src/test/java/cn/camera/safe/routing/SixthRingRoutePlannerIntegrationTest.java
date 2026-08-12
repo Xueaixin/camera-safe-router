@@ -54,7 +54,9 @@ class SixthRingRoutePlannerIntegrationTest {
                 100,
                 100,
                 2_000_000,
-                Duration.ofSeconds(5));
+                Duration.ofSeconds(5),
+                false,
+                4);
         GraphHopperManager graphManager = new GraphHopperManager(appProperties);
         graphManager.initialize();
         try {

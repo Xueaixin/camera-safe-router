@@ -23,6 +23,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.Completion.INTERRUPTED;
 import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.Completion.MAX_VISITED_STATES;
@@ -51,6 +54,7 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
     private final SixthRingRoutingManager sixthRingManager;
     private final RoutingEngine routingEngine;
     private final SixthRingProperties properties;
+    private final ExecutorService candidateEvaluator;
 
     public SixthRingRoutePlanner(
             GraphHopperManager graphManager,
@@ -61,6 +65,13 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
         this.sixthRingManager = sixthRingManager;
         this.routingEngine = routingEngine;
         this.properties = properties;
+        this.candidateEvaluator = Executors.newFixedThreadPool(
+                Math.max(1, Math.min(properties.candidateEvaluationThreads(), 8)),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "candidate-eval-");
+                    thread.setDaemon(true);
+                    return thread;
+                });
     }
 
     @Override
@@ -211,31 +222,26 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
                     properties.searchTimeout());
             rejectIncompleteSearch(search);
 
-            List<ReferenceOption> tierOptions = new ArrayList<>();
-            for (EdgeKeyMultiTargetDijkstra.PortalPath insidePath
-                    : search.candidates().values()) {
-                if (!evaluatedPortalIds.add(insidePath.portal().id())) {
-                    continue;
-                }
-                ReferenceOption option = referenceOption(
-                        direction,
-                        start,
-                        end,
-                        snapshot,
-                        context,
-                        hopper,
-                        queryGraph,
-                        queryTimeWeighting,
-                        roadClass,
-                        roadClassLink,
-                        roadEnvironment,
-                        referenceConstraint,
-                        releasesById,
-                        insidePath);
-                if (option != null) {
-                    tierOptions.add(option);
-                }
-            }
+            List<EdgeKeyMultiTargetDijkstra.PortalPath> newCandidates =
+                    search.candidates().values().stream()
+                            .filter(insidePath -> evaluatedPortalIds.add(
+                                    insidePath.portal().id()))
+                            .toList();
+            List<ReferenceOption> tierOptions = evaluateCandidates(
+                    direction,
+                    start,
+                    end,
+                    snapshot,
+                    context,
+                    hopper,
+                    queryGraph,
+                    queryTimeWeighting,
+                    roadClass,
+                    roadClassLink,
+                    roadEnvironment,
+                    referenceConstraint,
+                    releasesById,
+                    newCandidates);
             selected = tierOptions.stream()
                     .min(Comparator.comparingLong(ReferenceOption::durationMillis)
                             .thenComparingDouble(ReferenceOption::distanceMeters)
@@ -304,6 +310,92 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
                 audit.edgeChecks() + referenceRoute.searchEdgeChecks(),
                 audit.virtualEdgeChecks() + referenceRoute.virtualEdgeChecks(),
                 audit.blockedRejections() + referenceRoute.blockedRejections());
+    }
+
+    /**
+     * 评估本层新增候选的完整参考路线。启用并行时各候选相互独立，
+     * 可同时计算；并行与串行的选择结果一致（只改变耗时）。
+     */
+    private List<ReferenceOption> evaluateCandidates(
+            SixthRingPortal.Direction direction,
+            Wgs84Coordinate start,
+            Wgs84Coordinate end,
+            RoutingSnapshot snapshot,
+            SixthRingRoutingContext context,
+            HardAvoidingGraphHopper hopper,
+            QueryGraph queryGraph,
+            Weighting queryTimeWeighting,
+            EnumEncodedValue<RoadClass> roadClass,
+            BooleanEncodedValue roadClassLink,
+            EnumEncodedValue<RoadEnvironment> roadEnvironment,
+            EdgeTraversalConstraint referenceConstraint,
+            Map<String, ControlReleasePoint> releasesById,
+            List<EdgeKeyMultiTargetDijkstra.PortalPath> candidates) {
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        if (properties.parallelCandidateEvaluation() && candidates.size() > 1) {
+            List<Future<ReferenceOption>> futures = new ArrayList<>(candidates.size());
+            for (EdgeKeyMultiTargetDijkstra.PortalPath insidePath : candidates) {
+                futures.add(candidateEvaluator.submit(() -> {
+                    try {
+                        return referenceOption(
+                                direction,
+                                start,
+                                end,
+                                snapshot,
+                                context,
+                                hopper,
+                                queryGraph,
+                                queryTimeWeighting,
+                                roadClass,
+                                roadClassLink,
+                                roadEnvironment,
+                                referenceConstraint,
+                                releasesById,
+                                insidePath);
+                    } catch (RuntimeException exception) {
+                        LOGGER.warn("候选并行评估异常 通行口={} 异常={}",
+                                insidePath.portal().id(), exception.getMessage());
+                        return null;
+                    }
+                }));
+            }
+            List<ReferenceOption> options = new ArrayList<>();
+            for (Future<ReferenceOption> future : futures) {
+                try {
+                    ReferenceOption option = future.get();
+                    if (option != null) {
+                        options.add(option);
+                    }
+                } catch (Exception exception) {
+                    throw new IllegalStateException("候选并行评估失败", exception);
+                }
+            }
+            return List.copyOf(options);
+        }
+        List<ReferenceOption> options = new ArrayList<>();
+        for (EdgeKeyMultiTargetDijkstra.PortalPath insidePath : candidates) {
+            ReferenceOption option = referenceOption(
+                    direction,
+                    start,
+                    end,
+                    snapshot,
+                    context,
+                    hopper,
+                    queryGraph,
+                    queryTimeWeighting,
+                    roadClass,
+                    roadClassLink,
+                    roadEnvironment,
+                    referenceConstraint,
+                    releasesById,
+                    insidePath);
+            if (option != null) {
+                options.add(option);
+            }
+        }
+        return List.copyOf(options);
     }
 
     private ReferenceOption referenceOption(

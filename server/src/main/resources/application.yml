@@ -35,6 +35,8 @@ app:
     max-join-gap-meters: ${SIXTH_RING_MAX_JOIN_GAP_METERS:100}
     max-visited-states: ${SIXTH_RING_MAX_VISITED_STATES:2000000}
     search-timeout: ${SIXTH_RING_SEARCH_TIMEOUT:5s}
+    parallel-candidate-evaluation: ${SIXTH_RING_PARALLEL_CANDIDATE_EVAL:true}
+    candidate-evaluation-threads: ${SIXTH_RING_CANDIDATE_EVAL_THREADS:4}
   cameras:
     json-path: ${CAMERA_JSON_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/cameras/camera.json}
     snapshot-path: ${CAMERA_SNAPSHOT_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/snapshots}

@@ -19,11 +19,17 @@ public record SixthRingProperties(
         @DecimalMin("0.0") double maxSnapDistanceMeters,
         @DecimalMin("0.0") double maxJoinGapMeters,
         @Min(1) int maxVisitedStates,
-        @NotNull Duration searchTimeout) {
+        @NotNull Duration searchTimeout,
+        boolean parallelCandidateEvaluation,
+        @Min(1) int candidateEvaluationThreads) {
 
     public SixthRingProperties {
         if (searchTimeout == null || searchTimeout.isZero() || searchTimeout.isNegative()) {
             throw new IllegalArgumentException("sixth-ring search timeout must be positive");
+        }
+        if (candidateEvaluationThreads <= 0) {
+            throw new IllegalArgumentException(
+                    "sixth-ring candidate evaluation threads must be positive");
         }
     }
 }
