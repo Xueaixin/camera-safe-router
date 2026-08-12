@@ -11,6 +11,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableConfigurationProperties({AppProperties.class, SixthRingProperties.class})
 @EnableScheduling
 public class CameraSafeRoutingApplication {
+    /** 进程启动时刻（nanoTime），用于服务就绪日志计算启动耗时。 */
+    public static final long STARTED_AT_NANOS = System.nanoTime();
+
     public static void main(String[] args) {
         if (args.length > 0
                 && ("graph-build".equals(args[0])

@@ -27,6 +27,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.PriorityQueue;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 final class TollCorridorTopologyBuilder {
     private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
@@ -62,71 +66,52 @@ final class TollCorridorTopologyBuilder {
         if (mapped.isEmpty()) {
             return TollCorridorTopology.empty(sourceData.tollBooths().size());
         }
-        LOGGER.info("收费站走廊构建开始 附近节点={} 已映射={}",
-                nearbySources.size(), mapped.size());
+        int threads = configuredThreads(mapped.size());
+        LOGGER.info("收费站走廊构建开始 附近节点={} 已映射={} 线程={}",
+                nearbySources.size(), mapped.size(), threads);
         int totalMapped = mapped.size();
         int progressStep = Math.max(1, totalMapped / 4);
-        int processed = 0;
-        int candidateEntry = 0;
-        int candidateExit = 0;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        List<Future<TollBoothResult>> futures = new ArrayList<>(totalMapped);
+        for (MappedTollBooth tollBooth : mapped.values()) {
+            futures.add(executor.submit(() -> processTollBooth(
+                    graph, carAccess, weighting, controlledArea, roadClassification, tollBooth)));
+        }
+        executor.shutdown();
 
         List<CandidateCorridor> candidates = new ArrayList<>();
         Set<Long> relatedTollBooths = new HashSet<>();
         Set<Long> resolvedTollBooths = new HashSet<>();
-        for (MappedTollBooth tollBooth : mapped.values()) {
-            List<SearchPath> outsideToToll = search(
-                    graph, carAccess, weighting, controlledArea, roadClassification,
-                    tollBooth.graphNode(), SearchDirection.REVERSE, SearchTarget.OUTSIDE);
-            List<SearchPath> tollToOutside = search(
-                    graph, carAccess, weighting, controlledArea, roadClassification,
-                    tollBooth.graphNode(), SearchDirection.FORWARD, SearchTarget.OUTSIDE);
-            List<SearchPath> tollToMainlines = search(
-                    graph, carAccess, weighting, controlledArea, roadClassification,
-                    tollBooth.graphNode(), SearchDirection.FORWARD, SearchTarget.SIXTH_RING);
-            List<SearchPath> mainlineToTolls = search(
-                    graph, carAccess, weighting, controlledArea, roadClassification,
-                    tollBooth.graphNode(), SearchDirection.REVERSE, SearchTarget.SIXTH_RING);
-
-            if (!tollToMainlines.isEmpty() || !mainlineToTolls.isEmpty()) {
-                relatedTollBooths.add(tollBooth.source().osmNodeId());
-            }
-            if (!outsideToToll.isEmpty()) {
-                for (SearchPath tollToMainline : tollToMainlines) {
-                    if (!turnAtTollIsAllowed(
-                            weighting,
-                            tollBooth.graphNode(),
-                            outsideToToll.getFirst(),
-                            tollToMainline,
-                            true)) {
-                        continue;
-                    }
-                    candidates.add(CandidateCorridor.entry(
-                            tollBooth, outsideToToll.getFirst(), tollToMainline));
-                    resolvedTollBooths.add(tollBooth.source().osmNodeId());
+        int processed = 0;
+        int candidateEntry = 0;
+        int candidateExit = 0;
+        for (Future<TollBoothResult> future : futures) {
+            TollBoothResult result;
+            try {
+                result = future.get();
+            } catch (ExecutionException exception) {
+                executor.shutdownNow();
+                Throwable cause = exception.getCause();
+                if (cause instanceof RuntimeException runtimeException) {
+                    throw runtimeException;
                 }
+                throw new IllegalStateException("收费站走廊构建任务失败", cause);
+            } catch (InterruptedException exception) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("收费站走廊构建被中断", exception);
             }
-            if (!tollToOutside.isEmpty()) {
-                for (SearchPath mainlineToToll : mainlineToTolls) {
-                    if (!turnAtTollIsAllowed(
-                            weighting,
-                            tollBooth.graphNode(),
-                            mainlineToToll,
-                            tollToOutside.getFirst(),
-                            false)) {
-                        continue;
-                    }
-                    candidates.add(CandidateCorridor.exit(
-                            tollBooth, mainlineToToll, tollToOutside.getFirst()));
-                    resolvedTollBooths.add(tollBooth.source().osmNodeId());
-                }
-            }
+            candidates.addAll(result.candidates());
+            relatedTollBooths.addAll(result.relatedTollBooths());
+            resolvedTollBooths.addAll(result.resolvedTollBooths());
             processed++;
-            candidateEntry = (int) candidates.stream()
+            int resultEntry = (int) result.candidates().stream()
                     .filter(value -> value.role == TollCorridorTopology.Role.ENTRY)
                     .count();
-            candidateExit = candidates.size() - candidateEntry;
+            candidateEntry += resultEntry;
+            candidateExit += result.candidates().size() - resultEntry;
             if (processed % progressStep == 0 || processed == totalMapped) {
-                LOGGER.info("收费站走廊构建中 已处理={}/{} 入口候选={} 出口候选={}",
+                LOGGER.info("收费站走廊构建中 已完成={}/{} 入口候选={} 出口候选={}",
                         processed, totalMapped, candidateEntry, candidateExit);
             }
         }
@@ -167,6 +152,78 @@ final class TollCorridorTopologyBuilder {
                         entryCount,
                         exitCount,
                         relatedTollBooths.size() - resolvedTollBooths.size()));
+    }
+
+    /**
+     * 走廊构建并行线程数：优先使用 JVM 系统属性 {@code toll.corridor.threads}，
+     * 否则默认 {@code min(4, 可用CPU, 节点数)}。线程越多内存峰值越高，需保证服务堆充足。
+     */
+    private static int configuredThreads(int mappedCount) {
+        int configured = Integer.getInteger("toll.corridor.threads", 0);
+        if (configured > 0) {
+            return Math.max(1, Math.min(configured, mappedCount));
+        }
+        return Math.max(1, Math.min(
+                4, Math.min(Runtime.getRuntime().availableProcessors(), mappedCount)));
+    }
+
+    private static TollBoothResult processTollBooth(
+            BaseGraph graph,
+            BooleanEncodedValue carAccess,
+            Weighting weighting,
+            Geometry controlledArea,
+            RoadClassificationIndex roadClassification,
+            MappedTollBooth tollBooth) {
+        List<CandidateCorridor> candidates = new ArrayList<>();
+        Set<Long> related = new HashSet<>();
+        Set<Long> resolved = new HashSet<>();
+        List<SearchPath> outsideToToll = search(
+                graph, carAccess, weighting, controlledArea, roadClassification,
+                tollBooth.graphNode(), SearchDirection.REVERSE, SearchTarget.OUTSIDE);
+        List<SearchPath> tollToOutside = search(
+                graph, carAccess, weighting, controlledArea, roadClassification,
+                tollBooth.graphNode(), SearchDirection.FORWARD, SearchTarget.OUTSIDE);
+        List<SearchPath> tollToMainlines = search(
+                graph, carAccess, weighting, controlledArea, roadClassification,
+                tollBooth.graphNode(), SearchDirection.FORWARD, SearchTarget.SIXTH_RING);
+        List<SearchPath> mainlineToTolls = search(
+                graph, carAccess, weighting, controlledArea, roadClassification,
+                tollBooth.graphNode(), SearchDirection.REVERSE, SearchTarget.SIXTH_RING);
+
+        if (!tollToMainlines.isEmpty() || !mainlineToTolls.isEmpty()) {
+            related.add(tollBooth.source().osmNodeId());
+        }
+        if (!outsideToToll.isEmpty()) {
+            for (SearchPath tollToMainline : tollToMainlines) {
+                if (!turnAtTollIsAllowed(
+                        weighting,
+                        tollBooth.graphNode(),
+                        outsideToToll.getFirst(),
+                        tollToMainline,
+                        true)) {
+                    continue;
+                }
+                candidates.add(CandidateCorridor.entry(
+                        tollBooth, outsideToToll.getFirst(), tollToMainline));
+                resolved.add(tollBooth.source().osmNodeId());
+            }
+        }
+        if (!tollToOutside.isEmpty()) {
+            for (SearchPath mainlineToToll : mainlineToTolls) {
+                if (!turnAtTollIsAllowed(
+                        weighting,
+                        tollBooth.graphNode(),
+                        mainlineToToll,
+                        tollToOutside.getFirst(),
+                        false)) {
+                    continue;
+                }
+                candidates.add(CandidateCorridor.exit(
+                        tollBooth, mainlineToToll, tollToOutside.getFirst()));
+                resolved.add(tollBooth.source().osmNodeId());
+            }
+        }
+        return new TollBoothResult(candidates, related, resolved);
     }
 
     private static List<TollBoothSourceData.TollBooth> nearbySources(
@@ -478,6 +535,17 @@ final class TollCorridorTopologyBuilder {
             return adjacentWayMatches > existing.adjacentWayMatches
                     || (adjacentWayMatches == existing.adjacentWayMatches
                     && distanceMeters < existing.distanceMeters);
+        }
+    }
+
+    private record TollBoothResult(
+            List<CandidateCorridor> candidates,
+            Set<Long> relatedTollBooths,
+            Set<Long> resolvedTollBooths) {
+        private TollBoothResult {
+            candidates = List.copyOf(candidates);
+            relatedTollBooths = Set.copyOf(relatedTollBooths);
+            resolvedTollBooths = Set.copyOf(resolvedTollBooths);
         }
     }
 

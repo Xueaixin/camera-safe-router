@@ -2,6 +2,8 @@ package cn.camera.safe.routing;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -18,11 +20,21 @@ public final class RoutingSnapshotManager {
     private final RoutingSnapshotStore store;
     private final AtomicReference<RoutingSnapshot> current = new AtomicReference<>();
     private final ReentrantLock refreshLock = new ReentrantLock();
+    private final String serverPort;
     private volatile String lastFailure;
 
     public RoutingSnapshotManager(RoutingSnapshotBuilder builder, RoutingSnapshotStore store) {
+        this(builder, store, "8080");
+    }
+
+    @Autowired
+    public RoutingSnapshotManager(
+            RoutingSnapshotBuilder builder,
+            RoutingSnapshotStore store,
+            @Value("${server.port:8080}") String serverPort) {
         this.builder = builder;
         this.store = store;
+        this.serverPort = serverPort;
     }
 
     public RoutingSnapshot refreshNow() {
@@ -59,6 +71,7 @@ public final class RoutingSnapshotManager {
             SourceActivation sourceActivation) throws IOException {
         store.persist(candidate);
         sourceActivation.activate();
+        boolean firstPublish = current.get() == null;
         current.set(candidate);
         lastFailure = null;
         LOGGER.info("路由快照发布完成 源摄像头数={} 保留摄像头数={} "
@@ -77,6 +90,17 @@ public final class RoutingSnapshotManager {
                 candidate.matchedCameraCount(),
                 candidate.highwayExemptCameraCount(),
                 candidate.unmatchedCameraIds().size());
+        if (firstPublish) {
+            long startupMillis = (System.nanoTime()
+                    - cn.camera.safe.CameraSafeRoutingApplication.STARTED_AT_NANOS) / 1_000_000;
+            long totalSeconds = Math.max(0, startupMillis / 1_000);
+            String duration = totalSeconds >= 60
+                    ? (totalSeconds / 60) + "分" + (totalSeconds % 60) + "秒"
+                    : totalSeconds + "秒";
+            LOGGER.info("服务就绪 访问地址=http://localhost:{} 启动耗时={} "
+                            + "就绪检查=/api/v1/readiness 路线接口=/api/v1/routes",
+                    serverPort, duration);
+        }
         try {
             store.prune();
         } catch (IOException exception) {
