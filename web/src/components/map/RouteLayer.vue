@@ -79,7 +79,7 @@ watch(
       fittedRouteId = displayRouteId;
     }
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 );
 
 onBeforeUnmount(() => {

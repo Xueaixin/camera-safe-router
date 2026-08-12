@@ -32,6 +32,17 @@ function lngLatTuple(coordinate: { lng: number; lat: number }): [number, number]
   return [coordinate.lng, coordinate.lat];
 }
 
+function sampleEvenly<T>(items: T[], limit: number): T[] {
+  if (items.length <= limit) return items;
+  const step = items.length / limit;
+  const result: T[] = [];
+  for (let index = 0; index < limit; index++) {
+    const selected = items[Math.min(items.length - 1, Math.floor(index * step))];
+    if (selected !== undefined) result.push(selected);
+  }
+  return result;
+}
+
 function lngLatFromEvent(event: unknown): AmapLngLat | null {
   if (!isRecord(event) || !isRecord(event.lnglat)) return null;
   const candidate = event.lnglat as Partial<AmapLngLat>;
@@ -136,6 +147,7 @@ export class AmapMapAdapter implements MapAdapter {
   private handoffDescription: Promise<string> | null = null;
   private routePolyline: AmapPolyline | null = null;
   private cameraLayer: AmapMassMarks | null = null;
+  private cameraDataKey: string | null = null;
   private controlledAreaPolygons: AmapPolygon[] = [];
   private currentMarker: AmapMarker | null = null;
   private accuracyCircle: AmapCircle | null = null;
@@ -332,7 +344,11 @@ export class AmapMapAdapter implements MapAdapter {
   setCameras(cameras: CameraView[]) {
     if (!this.amap || !this.map) return;
     this.camerasById = new Map(cameras.map((camera) => [camera.id, camera]));
-    const data = cameras.map((camera) => ({ lnglat: lngLatTuple(camera), id: camera.id }));
+    const zoom = typeof this.map.getZoom === 'function' ? this.map.getZoom() : 11;
+    const all = cameras.map((camera) => ({ lnglat: lngLatTuple(camera), id: camera.id }));
+    // 低缩放时抽样显示，降低移动端 MassMarks 重绘压力；camerasById 保留全量以便弹窗。
+    const data = zoom <= 10 ? sampleEvenly(all, 1200) : all;
+    const dataKey = data.map((point) => point.id).join('|');
     if (!this.cameraLayer) {
       this.cameraLayer = new this.amap.MassMarks(data, {
         zIndex: 30,
@@ -344,8 +360,12 @@ export class AmapMapAdapter implements MapAdapter {
         },
       });
       this.cameraLayer.on('click', this.cameraClickHandler);
-    } else {
+      this.cameraDataKey = dataKey;
+    } else if (dataKey !== this.cameraDataKey) {
       this.cameraLayer.setData(data);
+      this.cameraDataKey = dataKey;
+    } else {
+      // 数据未变化，跳过重绘。
     }
     this.cameraLayer.setMap(this.map);
   }
@@ -357,6 +377,7 @@ export class AmapMapAdapter implements MapAdapter {
     }
     this.cameraLayer = null;
     this.camerasById.clear();
+    this.cameraDataKey = null;
     if (this.infoWindowKind === 'camera') this.closeInfoWindow();
   }
 

@@ -1,6 +1,15 @@
 import { expect, test, type BrowserContext, type Page } from '@playwright/test';
 
+async function expandSearchPanel(page: Page) {
+  const toggle = page.getByTestId('search-panel-toggle');
+  if (await toggle.isVisible()) {
+    const expanded = await toggle.getAttribute('aria-expanded');
+    if (expanded === 'false') await toggle.click();
+  }
+}
+
 async function selectEndpoints(page: Page) {
+  await expandSearchPanel(page);
   await page.getByRole('combobox', { name: '搜索起点' }).fill('天安');
   await page.getByRole('option', { name: /天安门广场/ }).click();
   await page.getByRole('combobox', { name: '搜索终点' }).fill('望京');
@@ -14,6 +23,7 @@ async function planInitialRoute(page: Page) {
 }
 
 async function planCrossBoundaryRoute(page: Page) {
+  await expandSearchPanel(page);
   await page.getByRole('combobox', { name: '搜索起点' }).fill('天安');
   await page.getByRole('option', { name: /天安门广场/ }).click();
   await page.getByRole('combobox', { name: '搜索终点' }).fill('天津');
@@ -93,6 +103,7 @@ test('allowed geolocation renders a display location and centers only on command
   await enableLocation(page, context);
   await page.getByTestId('location-button').click();
   await expect(page.getByTestId('map-container')).toHaveAttribute('data-centered', 'current');
+  await expandSearchPanel(page);
   await page.getByRole('combobox', { name: '搜索起点' }).click();
   await page.getByTestId('use-current-option').click();
   await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue('当前位置');
@@ -105,6 +116,7 @@ test('start-field current location requests geolocation without using the map to
   await context.grantPermissions(['geolocation'], { origin: 'http://127.0.0.1:4173' });
   await context.setGeolocation({ longitude: 116.39, latitude: 39.9, accuracy: 18.2 });
   await page.goto('/');
+  await expandSearchPanel(page);
   await page.getByRole('combobox', { name: '搜索起点' }).click();
   await page.getByTestId('use-current-option').click();
   await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue('当前位置');
@@ -116,6 +128,7 @@ test('start-field current location exposes permission failure next to the input'
 }) => {
   await context.clearPermissions();
   await page.goto('/');
+  await expandSearchPanel(page);
   await page.getByRole('combobox', { name: '搜索起点' }).click();
   await page.getByTestId('use-current-option').click();
   await expect(page.locator('.place-input__status')).toContainText('定位权限被拒绝', {
@@ -189,6 +202,7 @@ test('map point waits for an explicit start or end choice', async ({ page }) => 
   await page.goto('/');
   await expect(page.getByTestId('start-map-pick')).toHaveCount(0);
   await expect(page.getByTestId('end-map-pick')).toHaveCount(0);
+  await expandSearchPanel(page);
   const canvas = page.locator('.mock-map__canvas');
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
@@ -206,6 +220,22 @@ test('map point waits for an explicit start or end choice', async ({ page }) => 
   await page.getByTestId('set-start-from-map').click();
   await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue(/地图选点/);
   await expect(popup).toHaveCount(0);
+});
+
+test('mobile search panel expands after a map point start selection', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const toggle = page.getByTestId('search-panel-toggle');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  const canvas = page.locator('.mock-map__canvas');
+  const box = await canvas.boundingBox();
+  expect(box).not.toBeNull();
+  await canvas.click({
+    position: { x: 28, y: Math.min(420, Math.max(40, (box?.height ?? 500) - 180)) },
+  });
+  await page.getByTestId('set-start-from-map').click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue(/地图选点/);
 });
 
 test('mobile route sheet handle does not render a chevron', async ({ page }) => {

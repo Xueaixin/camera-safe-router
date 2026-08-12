@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronUp,
   Clock3,
-  LocateFixed,
   MapPinned,
   RefreshCw,
   Route,
@@ -23,17 +22,6 @@ const routeStore = useRouteStore();
 const locationStore = useLocationStore();
 const expanded = ref(false);
 const showSteps = ref(false);
-
-const rerouteDisabledReason = computed(() => {
-  if (!routeStore.end) return '请先选择终点';
-  if (routeStore.isPlanning) return '路线规划正在进行';
-  if (!locationStore.browserLocation) return '尚未获取当前位置';
-  if (!locationStore.isFresh) return '当前位置已超过 30 秒，请重新获取';
-  if (!locationStore.isAccurate)
-    return `定位精度差于 ${LOCATION_POLICY.maximumAccuracyMeters} 米，请等待更准确的位置`;
-  if (locationStore.state !== 'watching') return '当前位置暂不可用';
-  return '';
-});
 
 watch(
   () => routeStore.route?.routeId,
@@ -72,13 +60,11 @@ watch(
   },
 );
 
-function reroute() {
-  if (rerouteDisabledReason.value || !locationStore.browserLocation) return;
-  void routeStore.rerouteFromLocation(locationStore.browserLocation);
-}
-
 function retry() {
-  if (routeStore.lastAttemptKind === 'reroute') reroute();
+  if (routeStore.lastAttemptKind === 'reroute') {
+    // 重新规划已移至地图侧边工具栏，底部仅保留失败重试入口。
+    if (locationStore.browserLocation) void routeStore.rerouteFromLocation(locationStore.browserLocation);
+  }
   else void routeStore.plan();
 }
 </script>
@@ -242,21 +228,6 @@ function retry() {
         </span>
       </div>
 
-      <button
-        class="button button--secondary reroute-button"
-        type="button"
-        :disabled="Boolean(rerouteDisabledReason)"
-        :title="rerouteDisabledReason || '以最新当前位置为起点重新规划'"
-        data-testid="reroute-button"
-        @click="reroute"
-      >
-        <span
-          v-if="routeStore.isPlanning && routeStore.planningKind === 'reroute'"
-          class="spinner spinner--small"
-        />
-        <LocateFixed v-else :size="18" aria-hidden="true" />
-        从当前位置重新规划
-      </button>
     </div>
   </section>
 </template>

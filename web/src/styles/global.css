@@ -466,6 +466,10 @@ a:focus-visible {
   margin-top: 12px;
 }
 
+.search-panel__toggle {
+  display: none;
+}
+
 .map-toolbar {
   position: absolute;
   top: 50%;
@@ -741,13 +745,6 @@ a:focus-visible {
   color: var(--color-text-muted);
 }
 
-.reroute-button {
-  width: 100%;
-  margin-top: auto;
-  color: var(--color-location);
-  border-color: #90c9bb;
-}
-
 .osm-attribution {
   position: absolute;
   bottom: 3px;
@@ -977,6 +974,80 @@ a:focus-visible {
     box-shadow: var(--shadow-panel);
   }
 
+  .search-panel__toggle {
+    display: flex;
+    width: 100%;
+    min-height: 26px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 2px 0;
+    color: var(--color-text);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+  }
+
+  .search-panel.is-collapsed {
+    padding: 8px;
+  }
+
+  .search-panel.is-collapsed .search-panel__toggle {
+    min-height: 36px;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-control);
+    font-weight: 650;
+  }
+
+  .search-panel__grip {
+    width: 38px;
+    height: 4px;
+    background: #c7cdd5;
+    border-radius: 2px;
+  }
+
+  .search-panel__summary {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .search-panel__mini {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .search-panel__mini i {
+    display: grid;
+    width: 16px;
+    height: 16px;
+    flex: none;
+    place-items: center;
+    color: #ffffff;
+    background: #17814e;
+    border-radius: 50%;
+    font-size: 10px;
+    font-style: normal;
+  }
+
+  .search-panel__mini:last-of-type i {
+    background: #293444;
+  }
+
+  .search-panel__arrow {
+    flex: none;
+    color: var(--color-text-muted);
+  }
+
   .plan-button {
     min-height: 42px;
     margin-top: 8px;
@@ -1005,7 +1076,7 @@ a:focus-visible {
     left: calc(8px + var(--safe-left));
     z-index: 40;
     display: block;
-    min-height: 118px;
+    min-height: 64px;
     max-height: calc(100dvh - var(--safe-top) - 236px);
     flex: none;
     border: 1px solid var(--color-border);
