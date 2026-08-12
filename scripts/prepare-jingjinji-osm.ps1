@@ -77,7 +77,7 @@ if (-not (Test-Path -LiteralPath $resolvedSourcePath -PathType Leaf)) {
     throw "China PBF does not exist: $resolvedSourcePath"
 }
 if (-not (Test-Path -LiteralPath $script:OsmiumExecutable -PathType Leaf)) {
-    throw "osmium-tool does not exist: $script:OsmiumExecutable"
+    throw "osmium-tool does not exist: $script:OsmiumExecutable`n安装方法：运行 .\scripts\install-osmium.ps1 用工作区 micromamba 创建，或从已有机器拷贝 workspace\tools\osmium-env"
 }
 
 $sourceInfo = Invoke-OsmiumJson -Arguments @('fileinfo', '-j', $resolvedSourcePath)

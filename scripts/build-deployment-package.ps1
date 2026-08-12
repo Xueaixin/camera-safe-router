@@ -40,10 +40,11 @@ $jarPath = [System.IO.Path]::GetFullPath((Resolve-DefaultPath $Jar (Join-Path $r
 $osmiumPath = [System.IO.Path]::GetFullPath((Resolve-DefaultPath $OsmiumPath (Join-Path $workspaceRoot 'tools\osmium-env\Library\bin\osmium.exe')))
 $javaExecutable = if ([string]::IsNullOrWhiteSpace($Java)) { 'java' } else { $Java }
 
-foreach ($required in @($jarPath, $osmiumPath)) {
-    if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
-        throw "Required tool not found: $required"
-    }
+if (-not (Test-Path -LiteralPath $jarPath -PathType Leaf)) {
+    throw "jar not found: $jarPath"
+}
+if (-not (Test-Path -LiteralPath $osmiumPath -PathType Leaf)) {
+    throw "osmium-tool does not exist: $osmiumPath`n安装方法：运行 .\scripts\install-osmium.ps1 用工作区 micromamba 创建，或从已有机器拷贝 workspace\tools\osmium-env"
 }
 if ([string]::IsNullOrWhiteSpace($CameraJson) -or -not (Test-Path -LiteralPath $CameraJson -PathType Leaf)) {
     throw 'CameraJson is required and must exist'
