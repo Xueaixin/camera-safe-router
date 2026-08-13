@@ -103,6 +103,12 @@ public final class SixthRingRoutingManager {
                             profileWeighting,
                             tollBoothSourceData)
                     : null;
+            if (roadClassification != null) {
+                RoadClassifier.applyIllegalDirectAccessTurns(
+                        hopper.getBaseGraph(),
+                        hopper.getEncodingManager(),
+                        roadClassification.index().forbiddenDirectAccessTurns());
+            }
             LOGGER.info("道路分类完成 耗时毫秒={}", (System.nanoTime() - classifyStarted) / 1_000_000);
             RoadClassificationAudit roadAudit = roadClassification == null
                     ? null : roadClassification.audit();

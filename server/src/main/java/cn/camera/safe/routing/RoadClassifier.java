@@ -11,10 +11,12 @@ import com.graphhopper.routing.util.EncodingManager;
 import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.BaseGraph;
 import com.graphhopper.storage.NodeAccess;
+import com.graphhopper.storage.TurnCostStorage;
 import com.graphhopper.util.FetchMode;
 import com.graphhopper.util.EdgeExplorer;
 import com.graphhopper.util.EdgeIterator;
 import com.graphhopper.util.PointList;
+import com.graphhopper.routing.ev.TurnRestriction;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -243,6 +245,11 @@ final class RoadClassifier {
         LOGGER.info("道路分类 互转走廊构建完成 R->H-T={} H-T->R={}",
                 interchangeTopology.audit().rToHtCorridors(),
                 interchangeTopology.audit().htToRCorridors());
+        List<RoadTurn> illegalDirectAccessTurns = detectIllegalDirectAccessTurns(
+                graph, roadClass, roadClassLink, allHighwayMainlineEdges,
+                tongzhouCheckpointBypassEdges);
+        LOGGER.info("道路分类 非法直连高速转向数={}",
+                illegalDirectAccessTurns.size());
         BitSet releasedConnectorEdges = (BitSet) connectors.releasedConnectorEdges().clone();
         releasedConnectorEdges.or(tollCorridors.baseEdges());
         BitSet sixthExitConnectorEdgeKeys = tollCorridors.corridors().isEmpty()
@@ -262,6 +269,7 @@ final class RoadClassifier {
         append(identity, "rht-entry-keys", interchangeTopology.htToREdgeKeys());
         append(identity, "rht-exit-keys", interchangeTopology.rToHtEdgeKeys());
         append(identity, "tongzhou-checkpoint-bypass", tongzhouCheckpointBypassEdges);
+        appendTurns(identity, "illegal-direct-access-turns", illegalDirectAccessTurns);
         return new RoadClassification(
                 new RoadClassificationIndex(
                         cameraExemptMainlineEdges,
@@ -280,6 +288,7 @@ final class RoadClassifier {
                         interchangeTopology.htToREdgeKeys(),
                         interchangeTopology.rToHtEdgeKeys(),
                         tongzhouCheckpointBypassEdges,
+                        illegalDirectAccessTurns,
                         "sha256:" + Hashing.sha256(identity.toString())),
                 audit,
                 tollCorridors,
@@ -471,6 +480,90 @@ final class RoadClassifier {
      * 两端仍连接可行驶高速，中间由平行 service 辅路衔接。把这些辅路边标记为
      * “通州检查站绕行辅路”，released 寻路阶段允许通行。
      */
+    /**
+     * 识别“普通道路无匝道直连高速主路”的转向对：非匝道、非高速主路的边与高速主路
+     * 通过节点（该节点至少 2 条主路边）相连时，禁止该普通边与任一主路边在该节点上的
+     * 直接互转。只禁转向、不禁整边，保留普通道路自身的通行能力。
+     */
+    private static List<RoadTurn> detectIllegalDirectAccessTurns(
+            BaseGraph graph,
+            EnumEncodedValue<RoadClass> roadClass,
+            BooleanEncodedValue roadClassLink,
+            BitSet mainlineEdges,
+            BitSet exemptEdges) {
+        int[] mainlineIncidence = new int[graph.getNodes()];
+        Map<Integer, List<Integer>> mainlineEdgesByNode = new HashMap<>();
+        AllEdgesIterator edges = graph.getAllEdges();
+        while (edges.next()) {
+            if (!mainlineEdges.get(edges.getEdge())) {
+                continue;
+            }
+            int base = edges.getBaseNode();
+            int adjacent = edges.getAdjNode();
+            mainlineIncidence[base]++;
+            mainlineIncidence[adjacent]++;
+            mainlineEdgesByNode.computeIfAbsent(base, ignored -> new ArrayList<>())
+                    .add(edges.getEdge());
+            mainlineEdgesByNode.computeIfAbsent(adjacent, ignored -> new ArrayList<>())
+                    .add(edges.getEdge());
+        }
+        Set<RoadTurn> turns = new HashSet<>();
+        edges = graph.getAllEdges();
+        while (edges.next()) {
+            int edgeId = edges.getEdge();
+            if (exemptEdges.get(edgeId)
+                    || mainlineEdges.get(edgeId)
+                    || edges.get(roadClassLink)) {
+                continue;
+            }
+            for (int node : new int[] {edges.getBaseNode(), edges.getAdjNode()}) {
+                if (mainlineIncidence[node] < 2) {
+                    continue;
+                }
+                for (int mainline : mainlineEdgesByNode.getOrDefault(node, List.of())) {
+                    if (mainline == edgeId) {
+                        continue;
+                    }
+                    turns.add(new RoadTurn(edgeId, node, mainline));
+                    turns.add(new RoadTurn(mainline, node, edgeId));
+                }
+            }
+        }
+        List<RoadTurn> sorted = new ArrayList<>(turns);
+        sorted.sort(Comparator.comparingInt(RoadTurn::fromEdge)
+                .thenComparingInt(RoadTurn::viaNode)
+                .thenComparingInt(RoadTurn::toEdge));
+        return List.copyOf(sorted);
+    }
+
+    /**
+     * 把非法直连高速转向写入图内存 TurnCostStorage（运行时写入，不需要重建图缓存）。
+     * 两条寻路路径（GraphHopper 标准 A* 与自定义多目标 Dijkstra）都会读取该存储。
+     */
+    static void applyIllegalDirectAccessTurns(
+            BaseGraph graph,
+            EncodingManager encodingManager,
+            List<RoadTurn> turns) {
+        if (turns.isEmpty()) {
+            return;
+        }
+        TurnCostStorage turnCostStorage = graph.getTurnCostStorage();
+        if (turnCostStorage == null) {
+            LOGGER.warn("道路分类 当前路网未启用 turn cost storage，非法直连高速转向无法生效");
+            return;
+        }
+        BooleanEncodedValue restriction = encodingManager.getTurnBooleanEncodedValue(
+                TurnRestriction.key("car"));
+        if (restriction == null) {
+            throw new IllegalStateException(
+                    "car profile turn restriction encoded value missing");
+        }
+        for (RoadTurn turn : turns) {
+            turnCostStorage.set(restriction, turn.fromEdge(), turn.viaNode(), turn.toEdge(), true);
+        }
+        LOGGER.info("道路分类 非法直连高速转向已写入 turn cost storage 数={}", turns.size());
+    }
+
     private static BitSet detectTongzhouCheckpointBypasses(
             BaseGraph graph,
             BooleanEncodedValue carAccess,
@@ -611,6 +704,18 @@ final class RoadClassifier {
     private static void append(StringBuilder value, String label, BitSet edges) {
         value.append(label).append('=');
         edges.stream().forEach(edgeId -> value.append(edgeId).append(','));
+        value.append('|');
+    }
+
+    private static void appendTurns(
+            StringBuilder value,
+            String label,
+            List<RoadTurn> turns) {
+        value.append(label).append('=');
+        turns.forEach(turn -> value.append(turn.fromEdge())
+                .append(':').append(turn.viaNode())
+                .append(':').append(turn.toEdge())
+                .append(','));
         value.append('|');
     }
 

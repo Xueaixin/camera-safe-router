@@ -3,6 +3,7 @@ package cn.camera.safe.routing;
 import com.graphhopper.util.GHUtility;
 
 import java.util.BitSet;
+import java.util.List;
 import java.util.Objects;
 
 /** Immutable road identities derived from the loaded base graph and controlled areas. */
@@ -23,6 +24,7 @@ public final class RoadClassificationIndex {
     private final BitSet rhtEntryEdgeKeys;
     private final BitSet rhtExitEdgeKeys;
     private final BitSet tongzhouCheckpointBypassEdges;
+    private final List<RoadTurn> forbiddenDirectAccessTurns;
     private final String fingerprint;
 
     /** Compatibility constructor for focused tests and legacy routing modes. */
@@ -136,6 +138,7 @@ public final class RoadClassificationIndex {
             BitSet rhtEntryEdgeKeys,
             BitSet rhtExitEdgeKeys,
             BitSet tongzhouCheckpointBypassEdges,
+            List<RoadTurn> forbiddenDirectAccessTurns,
             String fingerprint) {
         this.cameraExemptMainlineEdges = copy(
                 cameraExemptMainlineEdges, "cameraExemptMainlineEdges");
@@ -162,10 +165,51 @@ public final class RoadClassificationIndex {
         this.rhtExitEdgeKeys = copy(rhtExitEdgeKeys, "rhtExitEdgeKeys");
         this.tongzhouCheckpointBypassEdges = copy(
                 tongzhouCheckpointBypassEdges, "tongzhouCheckpointBypassEdges");
+        this.forbiddenDirectAccessTurns = List.copyOf(forbiddenDirectAccessTurns);
         if (fingerprint == null || fingerprint.isBlank()) {
             throw new IllegalArgumentException("road classification fingerprint is required");
         }
         this.fingerprint = fingerprint;
+    }
+
+    /** Compatibility constructor that keeps the illegal-direct-access turn set empty. */
+    public RoadClassificationIndex(
+            BitSet cameraExemptMainlineEdges,
+            BitSet allHighwayMainlineEdges,
+            BitSet sixthRingMainlineEdges,
+            BitSet tongzhouHighwayMainlineEdges,
+            BitSet forbiddenSixthInteriorHighwayEdges,
+            BitSet motorwayLinkEdges,
+            BitSet sixthInteriorEdges,
+            BitSet tongzhouOutsideSixthEdges,
+            BitSet releasedConnectorEdges,
+            BitSet sixthExitConnectorEdgeKeys,
+            BitSet sixthTollEntryEdgeKeys,
+            BitSet sixthTollExitEdgeKeys,
+            BitSet tongzhouHighwayConnectorEdges,
+            BitSet rhtEntryEdgeKeys,
+            BitSet rhtExitEdgeKeys,
+            BitSet tongzhouCheckpointBypassEdges,
+            String fingerprint) {
+        this(
+                cameraExemptMainlineEdges,
+                allHighwayMainlineEdges,
+                sixthRingMainlineEdges,
+                tongzhouHighwayMainlineEdges,
+                forbiddenSixthInteriorHighwayEdges,
+                motorwayLinkEdges,
+                sixthInteriorEdges,
+                tongzhouOutsideSixthEdges,
+                releasedConnectorEdges,
+                sixthExitConnectorEdgeKeys,
+                sixthTollEntryEdgeKeys,
+                sixthTollExitEdgeKeys,
+                tongzhouHighwayConnectorEdges,
+                rhtEntryEdgeKeys,
+                rhtExitEdgeKeys,
+                tongzhouCheckpointBypassEdges,
+                List.of(),
+                fingerprint);
     }
 
     static RoadClassificationIndex empty(String graphFingerprint) {
@@ -238,6 +282,15 @@ public final class RoadClassificationIndex {
     /** 通州境内高速检查站（主路 access=no）的平行绕行辅路，released 阶段允许通行。 */
     public boolean isTongzhouCheckpointBypass(int baseEdgeId) {
         return contains(tongzhouCheckpointBypassEdges, baseEdgeId);
+    }
+
+    /** Directed ordinary-to-mainline / mainline-to-ordinary turns forbidden at through-nodes. */
+    public List<RoadTurn> forbiddenDirectAccessTurns() {
+        return forbiddenDirectAccessTurns;
+    }
+
+    public int forbiddenDirectAccessTurnCount() {
+        return forbiddenDirectAccessTurns.size();
     }
 
     /** Directed link-chain keys of verified {@code H-T -> R} interchange corridors. */
