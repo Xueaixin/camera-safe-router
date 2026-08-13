@@ -67,6 +67,10 @@ final class RoutingGraphConfiguration {
         hopper.setProfiles(createProfile());
         hopper.getCHPreparationHandler().setCHProfiles();
         hopper.getLMPreparationHandler().setLMProfiles();
+        String graphStorage = System.getProperty("routing.graph.storage", "");
+        if (!graphStorage.isBlank()) {
+            hopper.setGraphStorage(graphStorage);
+        }
         return hopper;
     }
 

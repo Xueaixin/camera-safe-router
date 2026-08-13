@@ -6,6 +6,7 @@ import com.graphhopper.GraphHopper;
 import com.graphhopper.routing.ev.ImportUnit;
 import com.graphhopper.routing.util.OSMParsers;
 import com.graphhopper.routing.WeightingFactory;
+import com.graphhopper.storage.DAType;
 import com.graphhopper.util.PMap;
 
 import java.util.List;
@@ -18,6 +19,17 @@ public final class HardAvoidingGraphHopper extends GraphHopper {
 
     public HardAvoidingGraphHopper() {
         setImportRegistry(new RoadIdentityImportRegistry());
+    }
+
+    /** Experimental: switch graph storage (RAM_STORE/MMAP) without a full GraphHopperConfig. */
+    public void setGraphStorage(String type) {
+        try {
+            java.lang.reflect.Field field = GraphHopper.class.getDeclaredField("dataAccessDefaultType");
+            field.setAccessible(true);
+            field.set(this, DAType.fromString(type));
+        } catch (ReflectiveOperationException exception) {
+            throw new IllegalStateException("cannot set graph storage type: " + type, exception);
+        }
     }
 
     @Override
