@@ -6,7 +6,7 @@ param(
     [string]$TongzhouGeojson,
     # 源 PBF（用于计算 sourcePbfSha256）。
     [string]$Pbf,
-    # 生成的 schema v3 边界输出路径。
+    # 生成的 schema v4 边界输出路径（含 controlled_area/sixth_ring_area/tongzhou_area/provincial_border）。
     [string]$Output,
     # 生成的 Markdown 报告输出路径。
     [string]$Report,
