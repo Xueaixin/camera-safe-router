@@ -141,7 +141,8 @@ class InboundPerformanceProbeTest {
                 2_000_000,
                 Duration.ofSeconds(5),
                 parallel,
-                4);
+                4,
+                50);
     }
 
     private static Configuration configuration() {

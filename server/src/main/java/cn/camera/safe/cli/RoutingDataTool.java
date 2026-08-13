@@ -170,7 +170,8 @@ public final class RoutingDataTool {
                 + " " + ControlledAreaBoundaryGenerator.summarize(
                         controlledArea,
                         ControlledAreaBoundaryGenerator.sixthRingInsideFromLines(linesRoot),
-                        ControlledAreaBoundaryGenerator.tongzhouPolygon(tongzhouRoot)));
+                        ControlledAreaBoundaryGenerator.tongzhouPolygon(tongzhouRoot),
+                        ControlledAreaBoundaryGenerator.provincialBorder(tongzhouRoot)));
         if (report != null && !report.isBlank()) {
             Path reportPath = Path.of(report).toAbsolutePath().normalize();
             Files.createDirectories(reportPath.getParent());
@@ -258,8 +259,9 @@ public final class RoutingDataTool {
                     match (fails fast when they do not).
                   boundary-generate --sixth-ring-lines <file> --tongzhou <file> --pbf <file>
                     --output <file> [--report <file>] [--approved]
-                    Generate the schema v3 controlled-area boundary from the exported
-                    sixth-ring relation lines and Tongzhou relation polygon.
+                    Generate the schema v4 controlled-area boundary (including the
+                    Beijing provincial border) from the exported sixth-ring relation
+                    lines and Tongzhou relation polygon.
                 """);
     }
 }

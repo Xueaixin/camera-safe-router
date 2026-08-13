@@ -89,9 +89,41 @@ public final class ControlledAreaBoundaryGenerator {
         throw new IllegalStateException("Tongzhou relation r2988902 polygon was not exported");
     }
 
+    /** Merges the Tongzhou relation's admin_level=4 border ways into the provincial line. */
+    public static Geometry provincialBorder(JsonNode tongzhouRoot) {
+        LineMerger merger = new LineMerger();
+        for (JsonNode feature : tongzhouRoot.path("features")) {
+            JsonNode properties = feature.path("properties");
+            JsonNode geometry = feature.path("geometry");
+            if (!"LineString".equals(geometry.path("type").asText())
+                    || !"administrative".equals(properties.path("boundary").asText())
+                    || !"4".equals(properties.path("admin_level").asText())) {
+                continue;
+            }
+            LineString line = lineString(geometry.path("coordinates"));
+            if (line.getNumPoints() < 2 || line.isEmpty()) {
+                continue;
+            }
+            merger.add(line);
+        }
+        @SuppressWarnings("unchecked")
+        Collection<LineString> merged = merger.getMergedLineStrings();
+        List<LineString> lines = merged.stream()
+                .filter(line -> !line.isEmpty() && line.getNumPoints() >= 2)
+                .toList();
+        if (lines.isEmpty()) {
+            throw new IllegalStateException(
+                    "Tongzhou relation r2988902 must export admin_level=4 provincial border ways");
+        }
+        if (lines.size() == 1) {
+            return lines.get(0);
+        }
+        return GEOMETRY_FACTORY.createMultiLineString(lines.toArray(LineString[]::new));
+    }
+
     /**
-     * Unions the sixth-ring inner area with Tongzhou and writes the schema v3
-     * candidate (or approved) boundary file.
+     * Unions the sixth-ring inner area with Tongzhou and writes the schema v4
+     * candidate (or approved) boundary file, including the provincial border.
      */
     public static Geometry generateAndWrite(
             ObjectMapper objectMapper,
@@ -104,6 +136,7 @@ public final class ControlledAreaBoundaryGenerator {
             boolean approvedForProduction) throws IOException {
         Geometry sixthRingArea = GeometryFixer.fix(sixthRingInsideFromLines(sixthRingLines));
         Geometry tongzhouArea = tongzhouPolygon(tongzhouRoot);
+        Geometry provincialBorder = provincialBorder(tongzhouRoot);
         Geometry controlledArea = GeometryFixer.fix(sixthRingArea.union(tongzhouArea));
         if (!(controlledArea instanceof Polygon || controlledArea instanceof MultiPolygon)
                 || controlledArea.isEmpty() || !controlledArea.isValid()) {
@@ -116,7 +149,7 @@ public final class ControlledAreaBoundaryGenerator {
         if (!sixthRingArea.intersects(tongzhouArea)) {
             throw new IllegalStateException("sixth-ring inner area does not intersect Tongzhou");
         }
-        writeSchemaV3(
+        writeSchemaV4(
                 objectMapper,
                 output,
                 sixthRingSource,
@@ -125,11 +158,12 @@ public final class ControlledAreaBoundaryGenerator {
                 controlledArea,
                 sixthRingArea,
                 tongzhouArea,
+                provincialBorder,
                 approvedForProduction);
         return controlledArea;
     }
 
-    private static void writeSchemaV3(
+    private static void writeSchemaV4(
             ObjectMapper objectMapper,
             Path output,
             Path sixthRingSource,
@@ -138,12 +172,13 @@ public final class ControlledAreaBoundaryGenerator {
             Geometry controlledArea,
             Geometry sixthRingArea,
             Geometry tongzhouArea,
+            Geometry provincialBorder,
             boolean approvedForProduction) throws IOException {
         ObjectNode root = objectMapper.createObjectNode();
         root.put("type", "FeatureCollection");
         root.put("coordinateSystem", "WGS84");
-        root.put("schemaVersion", 3);
-        root.put("boundaryVersion", "controlled-area-v2");
+        root.put("schemaVersion", 4);
+        root.put("boundaryVersion", "controlled-area-v3");
         root.put("candidateOnly", !approvedForProduction);
         root.put("approvedForProduction", approvedForProduction);
         root.put("generatedAt", Instant.now().toString());
@@ -178,6 +213,13 @@ public final class ControlledAreaBoundaryGenerator {
         tongzhouProperties.put("osmRelationId", 2988902);
         tongzhouFeature.set("geometry", geometryNode(objectMapper, tongzhouArea));
 
+        ObjectNode provincialFeature = (ObjectNode) root.withArray("features").addObject();
+        provincialFeature.put("type", "Feature");
+        ObjectNode provincialProperties = provincialFeature.putObject("properties");
+        provincialProperties.put("role", "provincial_border");
+        provincialProperties.put("osmRelationId", 2988902);
+        provincialFeature.set("geometry", geometryNode(objectMapper, provincialBorder));
+
         Files.createDirectories(output.toAbsolutePath().normalize().getParent());
         Files.writeString(
                 output,
@@ -187,6 +229,20 @@ public final class ControlledAreaBoundaryGenerator {
 
     private static ObjectNode geometryNode(ObjectMapper objectMapper, Geometry geometry) {
         ObjectNode node = objectMapper.createObjectNode();
+        if (geometry instanceof org.locationtech.jts.geom.MultiLineString multiLine) {
+            node.put("type", "MultiLineString");
+            ArrayNode lines = node.putArray("coordinates");
+            for (int index = 0; index < multiLine.getNumGeometries(); index++) {
+                lines.add(coordinates(
+                        objectMapper, multiLine.getGeometryN(index).getCoordinates()));
+            }
+            return node;
+        }
+        if (geometry instanceof LineString line) {
+            node.put("type", "LineString");
+            node.set("coordinates", coordinates(objectMapper, line.getCoordinates()));
+            return node;
+        }
         if (geometry instanceof Polygon polygon) {
             node.put("type", "Polygon");
             node.set("coordinates", polygonCoordinates(objectMapper, polygon));
@@ -243,11 +299,21 @@ public final class ControlledAreaBoundaryGenerator {
 
     /** Compact summary line used by CLI output and audits. */
     public static String summarize(Geometry controlledArea, Geometry sixthRingArea, Geometry tongzhouArea) {
+        return summarize(controlledArea, sixthRingArea, tongzhouArea, null);
+    }
+
+    public static String summarize(
+            Geometry controlledArea,
+            Geometry sixthRingArea,
+            Geometry tongzhouArea,
+            Geometry provincialBorder) {
         return String.format(Locale.ROOT,
-                "controlled=%s sixthRing=%s tongzhou=%s",
+                "controlled=%s sixthRing=%s tongzhou=%s provincialBorderMeters=%s",
                 geometryType(controlledArea),
                 geometryType(sixthRingArea),
-                geometryType(tongzhouArea));
+                geometryType(tongzhouArea),
+                provincialBorder == null ? "0" : String.format(Locale.ROOT, "%.0f",
+                        provincialBorder.getLength() * 111_320.0));
     }
 
     private static String geometryType(Geometry geometry) {

@@ -17,7 +17,7 @@ class SixthRingRoutingManagerWiringTest {
                 .withBean(GraphHopperManager.class, () -> mock(GraphHopperManager.class))
                 .withBean(SixthRingProperties.class, () -> new SixthRingProperties(
                         "boundary.geojson", false, 50, 1000, 100, 100,
-                        2_000_000, Duration.ofSeconds(5), false, 4))
+                        2_000_000, Duration.ofSeconds(5), false, 4, 50))
                 .withBean(SixthRingBoundaryLoader.class,
                         () -> mock(SixthRingBoundaryLoader.class))
                 .withBean(SixthRingRoutingManager.class)

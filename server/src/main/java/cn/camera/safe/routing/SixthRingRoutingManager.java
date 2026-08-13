@@ -120,7 +120,9 @@ public final class SixthRingRoutingManager {
                     : roadClassification.index();
             long releaseStarted = System.nanoTime();
             ControlReleaseTopology releaseTopology = releaseTopologyBuilder.build(
-                    hopper.getBaseGraph(), carAccess, topology, roadClassificationIndex);
+                    hopper.getBaseGraph(), carAccess, topology, roadClassificationIndex,
+                    loaded.boundary().provincialBorder().orElse(null),
+                    properties.provincialBorderToleranceMeters());
             LOGGER.info("控制释放点拓扑完成 出界={} 入界={} 耗时毫秒={}",
                     releaseTopology.outbound().size(),
                     releaseTopology.inbound().size(),

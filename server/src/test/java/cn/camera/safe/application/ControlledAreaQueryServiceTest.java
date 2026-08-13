@@ -38,7 +38,7 @@ class ControlledAreaQueryServiceTest {
         when(manager.isBoundaryApprovedForProduction()).thenReturn(false);
         SixthRingProperties properties = new SixthRingProperties(
                 "boundary.geojson", false, 50, 1000, 100, 100,
-                2_000_000, Duration.ofSeconds(5), false, 4);
+                2_000_000, Duration.ofSeconds(5), false, 4, 50);
 
         var response = new ControlledAreaQueryService(
                 manager, new CoordinateConverter(), properties).current();

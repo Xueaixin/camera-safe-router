@@ -21,7 +21,8 @@ public record SixthRingProperties(
         @Min(1) int maxVisitedStates,
         @NotNull Duration searchTimeout,
         boolean parallelCandidateEvaluation,
-        @Min(1) int candidateEvaluationThreads) {
+        @Min(1) int candidateEvaluationThreads,
+        @DecimalMin("0.0") double provincialBorderToleranceMeters) {
 
     public SixthRingProperties {
         if (searchTimeout == null || searchTimeout.isZero() || searchTimeout.isNegative()) {

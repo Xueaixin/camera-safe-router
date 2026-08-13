@@ -37,6 +37,7 @@ app:
     search-timeout: ${SIXTH_RING_SEARCH_TIMEOUT:5s}
     parallel-candidate-evaluation: ${SIXTH_RING_PARALLEL_CANDIDATE_EVAL:true}
     candidate-evaluation-threads: ${SIXTH_RING_CANDIDATE_EVAL_THREADS:4}
+    provincial-border-tolerance-meters: ${SIXTH_RING_PROVINCIAL_BORDER_TOLERANCE_METERS:50}
   cameras:
     json-path: ${CAMERA_JSON_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/cameras/camera.json}
     snapshot-path: ${CAMERA_SNAPSHOT_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/snapshots}

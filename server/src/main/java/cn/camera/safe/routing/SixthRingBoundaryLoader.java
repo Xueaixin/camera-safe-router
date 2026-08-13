@@ -58,6 +58,7 @@ public final class SixthRingBoundaryLoader {
         Geometry controlledArea = null;
         Geometry sixthRingArea = null;
         Geometry tongzhouArea = null;
+        Geometry provincialBorder = null;
         Polygon legacyInside = null;
         for (JsonNode feature : root.path("features")) {
             String role = feature.path("properties").path("role").asText();
@@ -77,12 +78,22 @@ public final class SixthRingBoundaryLoader {
                     throw new IllegalStateException("受控区边界文件包含重复的 tongzhou_area");
                 }
                 tongzhouArea = polygonalGeometry(geometry);
+            } else if ("provincial_border".equals(role)) {
+                if (provincialBorder != null) {
+                    throw new IllegalStateException(
+                            "controlled-area boundary file contains duplicate provincial_border");
+                }
+                provincialBorder = lineGeometry(geometry);
             } else if ("inside_boundary".equals(role)) {
                 if (legacyInside != null) {
                     throw new IllegalStateException("旧版六环边界文件包含重复的 inside_boundary");
                 }
                 legacyInside = polygon(geometry);
             }
+        }
+        if (root.path("schemaVersion").asInt(1) >= 4 && provincialBorder == null) {
+            throw new IllegalStateException(
+                    "schema v4 controlled-area boundary must contain provincial_border");
         }
         if (controlledArea == null) {
             controlledArea = legacyInside;
@@ -100,10 +111,48 @@ public final class SixthRingBoundaryLoader {
 
         String version = "sha256:" + Hashing.sha256(normalized);
         return new LoadedBoundary(
-                new SixthRingBoundary(controlledArea, sixthRingArea, tongzhouArea, version),
+                new SixthRingBoundary(
+                        controlledArea, sixthRingArea, tongzhouArea, provincialBorder, version),
                 sourcePbfSha256.toLowerCase(),
                 approvedForProduction,
                 normalized);
+    }
+
+    static Geometry lineGeometry(JsonNode geometry) {
+        String type = geometry.path("type").asText();
+        JsonNode coordinates = geometry.path("coordinates");
+        return switch (type) {
+            case "LineString" -> GEOMETRY_FACTORY.createLineString(lineCoordinates(coordinates));
+            case "MultiLineString" -> multiLine(coordinates);
+            default -> throw new IllegalStateException(
+                    "provincial border geometry must be LineString or MultiLineString");
+        };
+    }
+
+    private static org.locationtech.jts.geom.MultiLineString multiLine(JsonNode lines) {
+        if (!lines.isArray() || lines.isEmpty()) {
+            throw new IllegalStateException("provincial border MultiLineString coordinates empty");
+        }
+        org.locationtech.jts.geom.LineString[] values =
+                new org.locationtech.jts.geom.LineString[lines.size()];
+        for (int index = 0; index < lines.size(); index++) {
+            values[index] = GEOMETRY_FACTORY.createLineString(lineCoordinates(lines.get(index)));
+        }
+        return GEOMETRY_FACTORY.createMultiLineString(values);
+    }
+
+    private static Coordinate[] lineCoordinates(JsonNode coordinates) {
+        if (!coordinates.isArray() || coordinates.size() < 2) {
+            throw new IllegalStateException("provincial border LineString coordinates invalid");
+        }
+        List<Coordinate> values = new ArrayList<>();
+        for (JsonNode coordinate : coordinates) {
+            if (!coordinate.isArray() || coordinate.size() < 2) {
+                throw new IllegalStateException("provincial border LineString coordinates invalid");
+            }
+            values.add(new Coordinate(coordinate.get(0).asDouble(), coordinate.get(1).asDouble()));
+        }
+        return values.toArray(Coordinate[]::new);
     }
 
     static Geometry polygonalGeometry(JsonNode geometry) {

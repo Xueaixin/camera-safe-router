@@ -13,10 +13,12 @@ import java.util.Optional;
 
 public final class SixthRingBoundary {
     private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
+    private static final double PROVINCIAL_BORDER_MAX_OFFSET_DEGREES = 0.005;
 
     private final Geometry controlledArea;
     private final Geometry sixthRingArea;
     private final Geometry tongzhouArea;
+    private final Geometry provincialBorder;
     private final String version;
 
     public SixthRingBoundary(Geometry controlledArea, String version) {
@@ -34,6 +36,15 @@ public final class SixthRingBoundary {
             Geometry controlledArea,
             Geometry sixthRingArea,
             Geometry tongzhouArea,
+            String version) {
+        this(controlledArea, sixthRingArea, tongzhouArea, null, version);
+    }
+
+    public SixthRingBoundary(
+            Geometry controlledArea,
+            Geometry sixthRingArea,
+            Geometry tongzhouArea,
+            Geometry provincialBorder,
             String version) {
         Objects.requireNonNull(controlledArea, "controlledArea");
         if (version == null || version.isBlank()) {
@@ -54,6 +65,13 @@ public final class SixthRingBoundary {
         if (tongzhouCopy != null && tongzhouCopy.difference(copy).getArea() >= 1e-12) {
             throw new IllegalArgumentException("controlled area must cover Tongzhou area");
         }
+        Geometry provincialCopy = lineCopy(provincialBorder, "provincial border");
+        if (provincialCopy != null && tongzhouCopy != null
+                && provincialCopy.distance(copy.getBoundary())
+                        > PROVINCIAL_BORDER_MAX_OFFSET_DEGREES) {
+            throw new IllegalArgumentException(
+                    "provincial border must lie on the controlled-area boundary");
+        }
         if (sixthRingCopy != null && tongzhouCopy != null) {
             Geometry union = sixthRingCopy.union(tongzhouCopy);
             if (union.difference(copy).getArea() >= 1e-12
@@ -66,6 +84,7 @@ public final class SixthRingBoundary {
         this.controlledArea = copy;
         this.sixthRingArea = sixthRingCopy;
         this.tongzhouArea = tongzhouCopy;
+        this.provincialBorder = provincialCopy;
         this.version = version;
     }
 
@@ -81,6 +100,10 @@ public final class SixthRingBoundary {
         return Optional.ofNullable(tongzhouArea).map(Geometry::copy);
     }
 
+    public Optional<Geometry> provincialBorder() {
+        return Optional.ofNullable(provincialBorder).map(Geometry::copy);
+    }
+
     private static Geometry polygonalCopy(Geometry geometry, String label) {
         if (geometry == null) {
             return null;
@@ -90,6 +113,20 @@ public final class SixthRingBoundary {
                 || copy.isEmpty() || !copy.isValid()) {
             throw new IllegalArgumentException(
                     label + " must be a non-empty valid Polygon or MultiPolygon");
+        }
+        return copy;
+    }
+
+    private static Geometry lineCopy(Geometry geometry, String label) {
+        if (geometry == null) {
+            return null;
+        }
+        Geometry copy = geometry.copy();
+        if (!(copy instanceof org.locationtech.jts.geom.LineString
+                || copy instanceof org.locationtech.jts.geom.MultiLineString)
+                || copy.isEmpty() || !copy.isValid()) {
+            throw new IllegalArgumentException(
+                    label + " must be a non-empty valid LineString or MultiLineString");
         }
         return copy;
     }
