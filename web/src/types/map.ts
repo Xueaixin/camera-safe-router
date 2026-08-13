@@ -42,6 +42,13 @@ export interface HandoffMarkerData {
   outerEndpoint: OutputCoordinate;
 }
 
+export interface ExternalRoute {
+  id: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  geometry: OutputCoordinate[];
+}
+
 export interface MapAdapter {
   initialize(container: HTMLElement, callbacks: MapAdapterCallbacks): Promise<void>;
   destroy(): void;
@@ -50,6 +57,11 @@ export interface MapAdapter {
   setEndpointMarkers(start: SelectedPlace | null, end: SelectedPlace | null): void;
   setHandoffMarker(data: HandoffMarkerData | null): void;
   setRoute(geometry: OutputCoordinate[]): void;
+  setExternalRoutes(
+    routes: ExternalRoute[] | null,
+    selectedIndex: number,
+    onSelect?: (index: number) => void,
+  ): void;
   clearRoute(): void;
   fitRoute(geometry: OutputCoordinate[]): void;
   setCameras(cameras: CameraView[]): void;

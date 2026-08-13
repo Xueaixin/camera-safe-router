@@ -90,10 +90,6 @@ public final class RoutePlanningService {
 
         Wgs84Coordinate start = normalize(request.start());
         Wgs84Coordinate end = normalize(request.end());
-        if (!graphManager.contains(start) || !graphManager.contains(end)) {
-            throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY,
-                    ErrorCode.OUTSIDE_ROUTING_BOUNDS, "起点或终点不在当前路网支持范围");
-        }
         if (isRestrictedEndpoint(start, snapshot)) {
             throw new BusinessException(HttpStatus.CONFLICT,
                     ErrorCode.START_IN_RESTRICTED_AREA, "起点位于摄像头避让范围内");
@@ -300,8 +296,10 @@ public final class RoutePlanningService {
                 .getBooleanEncodedValue("car_access");
         EdgeFilter routable = edge -> edge.get(carAccess) || edge.getReverse(carAccess);
         Snap snap = hopper.getLocationIndex().findClosest(point.lat(), point.lng(), routable);
-        return !snap.isValid()
-                || safetyValidator.isRestricted(
-                        point, snapshot, snap.getClosestEdge().getEdge());
+        if (!snap.isValid()) {
+            return false;
+        }
+        return safetyValidator.isRestricted(
+                point, snapshot, snap.getClosestEdge().getEdge());
     }
 }

@@ -33,6 +33,7 @@ class MapStub implements MapAdapter {
   setEndpointMarkers(_start: SelectedPlace | null, _end: SelectedPlace | null) {}
   setHandoffMarker(_data: HandoffMarkerData | null) {}
   setRoute() {}
+  setExternalRoutes() {}
   clearRoute() {}
   fitRoute() {}
   setCameras() {}

@@ -23,17 +23,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.Completion.INTERRUPTED;
 import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.Completion.MAX_VISITED_STATES;
 import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.Completion.TIMEOUT;
 import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.SearchDirection.FORWARD;
 import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.SearchDirection.REVERSE;
-import static cn.camera.safe.routing.SixthRingBoundary.Location.BOUNDARY;
 import static cn.camera.safe.routing.SixthRingBoundary.Location.INSIDE;
 import static cn.camera.safe.routing.SixthRingBoundary.Location.OUTSIDE;
 import static cn.camera.safe.routing.SixthRingPortal.Direction.INBOUND;
@@ -42,20 +37,18 @@ import static cn.camera.safe.routing.SixthRingPortal.Direction.OUTBOUND;
 @Component
 public final class SixthRingRoutePlanner implements RoutePlanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(SixthRingRoutePlanner.class);
-    private static final SixthRingRouteShapeValidator ROUTE_SHAPE_VALIDATOR =
-            new SixthRingRouteShapeValidator();
     private static final ExternalHandoffSelector EXTERNAL_HANDOFF_SELECTOR =
             new ExternalHandoffSelector();
-    private static final NavigationHandoffSelector NAVIGATION_HANDOFF_SELECTOR =
-            new NavigationHandoffSelector();
-    private static final BoundaryCrossingResolver BOUNDARY_CROSSING_RESOLVER =
-            new BoundaryCrossingResolver();
+    private static final OuterHandoffWalker OUTER_HANDOFF_WALKER = new OuterHandoffWalker();
+    private static final double OUTBOUND_DIRECTION_THRESHOLD_DEGREES = 135;
+    private static final double INBOUND_DIRECTION_THRESHOLD_DEGREES = 90;
+    private static final double FALLBACK_DIRECTION_THRESHOLD_DEGREES = 180;
+    private static final int MAX_DISTANCE_TIERS = 5;
 
     private final GraphHopperManager graphManager;
     private final SixthRingRoutingManager sixthRingManager;
     private final RoutingEngine routingEngine;
     private final SixthRingProperties properties;
-    private final ExecutorService candidateEvaluator;
 
     public SixthRingRoutePlanner(
             GraphHopperManager graphManager,
@@ -66,13 +59,6 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
         this.sixthRingManager = sixthRingManager;
         this.routingEngine = routingEngine;
         this.properties = properties;
-        this.candidateEvaluator = Executors.newFixedThreadPool(
-                Math.max(1, Math.min(properties.candidateEvaluationThreads(), 8)),
-                runnable -> {
-                    Thread thread = new Thread(runnable, "candidate-eval-");
-                    thread.setDaemon(true);
-                    return thread;
-                });
     }
 
     @Override
@@ -92,7 +78,8 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
 
         SixthRingBoundary.Location startLocation = context.boundary().locate(start);
         SixthRingBoundary.Location endLocation = context.boundary().locate(end);
-        if (startLocation == BOUNDARY || endLocation == BOUNDARY) {
+        if (startLocation == SixthRingBoundary.Location.BOUNDARY
+                || endLocation == SixthRingBoundary.Location.BOUNDARY) {
             throw new SixthRingRouteException(
                     SixthRingRouteException.Reason.BOUNDARY_AMBIGUOUS,
                     "起点或终点位于六环边界带，请调整点位后重试");
@@ -127,6 +114,23 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
             Wgs84Coordinate start,
             Wgs84Coordinate end,
             RoutingSnapshot snapshot) {
+        if (mode == RoutePlanningMode.EXTERNAL_ONLY) {
+            return new PlannedRoute(
+                    mode,
+                    boundaryVersion,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    0,
+                    0,
+                    List.of(start, end),
+                    0,
+                    0,
+                    0);
+        }
         EngineRoute route = routingEngine.route(start, end, snapshot);
         RouteLeg leg = new RouteLeg(
                 route.distanceMeters(), route.durationMillis(), route.geometry());
@@ -136,8 +140,8 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
                 null,
                 null,
                 null,
-                mode == RoutePlanningMode.INTERNAL_SAFE ? leg : null,
-                mode == RoutePlanningMode.EXTERNAL_ONLY ? leg : null,
+                leg,
+                null,
                 null,
                 route.distanceMeters(),
                 route.durationMillis(),
@@ -201,22 +205,18 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
                 context.roadClassification());
 
         long started = System.nanoTime();
-        EdgeTraversalConstraint referenceConstraint = RoadStateTraversalConstraint.released(
-                context.boundary().controlledArea(),
-                baseGraph.getEdges(),
-                context.roadClassification());
         Set<String> evaluatedPortalIds = new HashSet<>();
-        EdgeKeyMultiTargetDijkstra.SearchResult search;
-        ReferenceOption selected;
-        int tier = 1;
-        do {
+        List<EdgeKeyMultiTargetDijkstra.PortalPath> accumulatedCandidates = new ArrayList<>();
+        ScoredCandidate selected = null;
+        int selectedTier = 0;
+        for (int tier = 1; tier <= MAX_DISTANCE_TIERS; tier++) {
             if (Thread.currentThread().isInterrupted()) {
                 throw new SixthRingRouteException(
                         SixthRingRouteException.Reason.SEARCH_TIMEOUT,
                         "路线计算被中断");
             }
             double toleranceMeters = (double) properties.portalDistanceTierMeters() * tier;
-            search = EdgeKeyMultiTargetDijkstra.search(
+            EdgeKeyMultiTargetDijkstra.SearchResult search = EdgeKeyMultiTargetDijkstra.search(
                     queryGraph,
                     blockedWeighting,
                     snap.getClosestNode(),
@@ -227,423 +227,208 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
                     properties.maxVisitedStates(),
                     properties.searchTimeout());
             rejectIncompleteSearch(search);
-
             List<EdgeKeyMultiTargetDijkstra.PortalPath> newCandidates =
                     search.candidates().values().stream()
                             .filter(insidePath -> evaluatedPortalIds.add(
                                     insidePath.portal().id()))
                             .toList();
-            List<ReferenceOption> tierOptions = evaluateCandidates(
+            accumulatedCandidates.addAll(newCandidates);
+            selected = selectBest(
+                    direction, start, end, newCandidates, releasesById);
+            if (selected != null) {
+                selectedTier = tier;
+                break;
+            }
+        }
+        if (selected == null) {
+            selected = selectBest(
                     direction,
                     start,
                     end,
-                    snapshot,
-                    context,
-                    hopper,
-                    queryGraph,
-                    queryTimeWeighting,
-                    roadClass,
-                    roadClassLink,
-                    roadEnvironment,
-                    referenceConstraint,
+                    accumulatedCandidates,
                     releasesById,
-                    newCandidates);
-            selected = tierOptions.stream()
-                    .min(Comparator.comparingLong(ReferenceOption::durationMillis)
-                            .thenComparingDouble(ReferenceOption::distanceMeters)
-                            .thenComparingDouble(option -> option.safeSegment().distanceMeters())
-                            .thenComparing(option -> option.releasePoint().id()))
-                    .orElse(null);
-            if (selected == null) {
-                if (search.completion() == EdgeKeyMultiTargetDijkstra.Completion.EXHAUSTED) {
-                    throw new SixthRingRouteException(
-                            SixthRingRouteException.Reason.REFERENCE_ROUTE_FAILED,
-                            "全部可达边界候选均无法生成连续的完整参考路线");
-                }
-                tier++;
-            }
-        } while (selected == null);
+                    FALLBACK_DIRECTION_THRESHOLD_DEGREES);
+        }
+        if (selected == null) {
+            throw new SixthRingRouteException(
+                    SixthRingRouteException.Reason.NO_ROUTE,
+                    "未找到方向合理且可达的六环通行口");
+        }
         long searchMillis = (System.nanoTime() - started) / 1_000_000;
-        LOGGER.info("Control release selected type={} id={}",
-                selected.releasePoint().type(), selected.releasePoint().id());
+
+        TracedRouteLeg safeRoute = RouteGeometryAssembler.insideLeg(
+                queryGraph,
+                queryTimeWeighting,
+                selected.portalPath(),
+                direction,
+                baseGraph.getEdges(),
+                roadClass,
+                roadClassLink,
+                roadEnvironment);
+        OuterHandoffWalker.Result handoffResult = OUTER_HANDOFF_WALKER.walk(
+                baseGraph,
+                context.boundary(),
+                context.roadClassification(),
+                carAccess,
+                selected.releasePoint()).orElseThrow(() -> new SixthRingRouteException(
+                SixthRingRouteException.Reason.REFERENCE_ROUTE_FAILED,
+                "通行口界外无法确定高德导航交接点"));
+        RouteLeg safeSegment = assembleSafeSegment(
+                direction, safeRoute.leg(), handoffResult);
+        Wgs84Coordinate handoffCoordinate =
+                handoffResult.path().get(handoffResult.path().size() - 1);
+        int handoffIndex = direction == OUTBOUND
+                ? safeSegment.geometry().size() - 1 : 1;
+        NavigationHandoffPoint navigationHandoff = new NavigationHandoffPoint(
+                handoffCoordinate,
+                handoffResult.clearanceMeters(),
+                handoffResult.roadName(),
+                NavigationHandoffPoint.Segment.SAFE,
+                handoffIndex);
+        ExternalHandoffPoint externalHandoff =
+                EXTERNAL_HANDOFF_SELECTOR.select(navigationHandoff);
+        SixthRingPortal boundaryCrossing =
+                selected.releasePoint().physicalPortalOptional().orElseThrow(
+                        () -> new IllegalStateException(
+                                "selected control release point lost its physical portal"));
 
         LOGGER.info("跨界路线规划完成 方向={} 边界版本={} 通行口={} Dmin米={} "
-                        + "受控侧距离米={} 完整时间秒={} 完整距离米={} 距离层={} "
-                        + "已评估候选数={} 访问状态={} 总耗时毫秒={}",
+                        + "受控侧距离米={} 交接点净空米={} 距离层={} "
+                        + "已评估候选数={} 总耗时毫秒={}",
                 direction,
                 context.boundary().version(),
-                selected.boundaryCrossing().id(),
-                Math.round(search.minimumDistanceMeters()),
-                Math.round(selected.safeSegment().distanceMeters()),
-                Math.round(selected.durationMillis() / 1_000.0),
-                Math.round(selected.distanceMeters()),
-                tier,
+                boundaryCrossing.id(),
+                Math.round(selected.portalPath().distanceMeters()),
+                Math.round(safeSegment.distanceMeters()),
+                Math.round(handoffResult.clearanceMeters()),
+                selectedTier,
                 evaluatedPortalIds.size(),
-                search.visitedStates(),
                 searchMillis);
-        PortalAnchoredRoute anchoredRoute = selected.anchoredRoute();
-        EngineRoute referenceRoute = anchoredRoute.route();
-        NavigationHandoffPoint navigationHandoff = NAVIGATION_HANDOFF_SELECTOR.select(
-                direction,
-                context.boundary(),
-                selected.boundaryCrossing(),
-                context.roadClassification(),
-                anchoredRoute).orElse(null);
-        ExternalHandoffPoint externalHandoff = navigationHandoff == null
-                ? null : EXTERNAL_HANDOFF_SELECTOR.select(navigationHandoff);
-        HandoffSegments segments = navigationHandoff == null
-                ? new HandoffSegments(selected.safeSegment(), selected.referenceSegment())
-                : splitAtNavigationHandoff(
-                        direction,
-                        selected.safeSegment(),
-                        selected.referenceSegment(),
-                        navigationHandoff);
         return new PlannedRoute(
                 direction == OUTBOUND
                         ? RoutePlanningMode.CROSS_BOUNDARY_OUTBOUND
                         : RoutePlanningMode.CROSS_BOUNDARY_INBOUND,
                 context.boundary().version(),
                 direction,
-                selected.boundaryCrossing(),
-                navigationHandoff,
-                segments.safeSegment(),
-                segments.referenceSegment(),
-                externalHandoff,
-                selected.distanceMeters(),
-                selected.durationMillis(),
-                selected.geometry(),
-                selected.trace(),
-                audit.edgeChecks() + referenceRoute.searchEdgeChecks(),
-                audit.virtualEdgeChecks() + referenceRoute.virtualEdgeChecks(),
-                audit.blockedRejections() + referenceRoute.blockedRejections());
-    }
-
-    /**
-     * 评估本层新增候选的完整参考路线。启用并行时各候选相互独立，
-     * 可同时计算；并行与串行的选择结果一致（只改变耗时）。
-     */
-    private List<ReferenceOption> evaluateCandidates(
-            SixthRingPortal.Direction direction,
-            Wgs84Coordinate start,
-            Wgs84Coordinate end,
-            RoutingSnapshot snapshot,
-            SixthRingRoutingContext context,
-            HardAvoidingGraphHopper hopper,
-            QueryGraph queryGraph,
-            Weighting queryTimeWeighting,
-            EnumEncodedValue<RoadClass> roadClass,
-            BooleanEncodedValue roadClassLink,
-            EnumEncodedValue<RoadEnvironment> roadEnvironment,
-            EdgeTraversalConstraint referenceConstraint,
-            Map<String, ControlReleasePoint> releasesById,
-            List<EdgeKeyMultiTargetDijkstra.PortalPath> candidates) {
-        if (candidates.isEmpty()) {
-            return List.of();
-        }
-        if (properties.parallelCandidateEvaluation() && candidates.size() > 1) {
-            AtomicBoolean cancelled = new AtomicBoolean(false);
-            List<Future<ReferenceOption>> futures = new ArrayList<>(candidates.size());
-            java.util.Queue<Integer> errored = new java.util.concurrent.ConcurrentLinkedQueue<>();
-            for (int index = 0; index < candidates.size(); index++) {
-                EdgeKeyMultiTargetDijkstra.PortalPath insidePath = candidates.get(index);
-                int candidateIndex = index;
-                futures.add(candidateEvaluator.submit(() -> {
-                    try {
-                        if (cancelled.get()
-                                || Thread.currentThread().isInterrupted()) {
-                            return null;
-                        }
-                        return referenceOption(
-                                direction,
-                                start,
-                                end,
-                                snapshot,
-                                context,
-                                hopper,
-                                queryGraph,
-                                queryTimeWeighting,
-                                roadClass,
-                                roadClassLink,
-                                roadEnvironment,
-                                referenceConstraint,
-                                releasesById,
-                                insidePath);
-                    } catch (Throwable exception) {
-                        LOGGER.warn("候选并行评估异常 通行口={} 异常={} 类型={}",
-                                insidePath.portal().id(), exception.getMessage(),
-                                exception.getClass().getSimpleName());
-                        errored.add(candidateIndex);
-                        return null;
-                    }
-                }));
-            }
-            List<ReferenceOption> options = new ArrayList<>();
-            for (Future<ReferenceOption> future : futures) {
-                try {
-                    ReferenceOption option = future.get();
-                    if (option != null) {
-                        options.add(option);
-                    }
-                } catch (InterruptedException exception) {
-                    cancelled.set(true);
-                    Thread.currentThread().interrupt();
-                    throw new SixthRingRouteException(
-                            SixthRingRouteException.Reason.SEARCH_TIMEOUT,
-                            "路线计算被中断");
-                } catch (Exception exception) {
-                    throw new IllegalStateException("候选并行评估失败", exception);
-                }
-            }
-            for (Integer index : errored) {
-                EdgeKeyMultiTargetDijkstra.PortalPath insidePath = candidates.get(index);
-                ReferenceOption option = referenceOption(
-                        direction,
-                        start,
-                        end,
-                        snapshot,
-                        context,
-                        hopper,
-                        queryGraph,
-                        queryTimeWeighting,
-                        roadClass,
-                        roadClassLink,
-                        roadEnvironment,
-                        referenceConstraint,
-                        releasesById,
-                        insidePath);
-                if (option != null) {
-                    options.add(option);
-                }
-            }
-            return List.copyOf(options);
-        }
-        List<ReferenceOption> options = new ArrayList<>();
-        for (EdgeKeyMultiTargetDijkstra.PortalPath insidePath : candidates) {
-            if (Thread.currentThread().isInterrupted()) {
-                throw new SixthRingRouteException(
-                        SixthRingRouteException.Reason.SEARCH_TIMEOUT,
-                        "路线计算被中断");
-            }
-            ReferenceOption option = referenceOption(
-                    direction,
-                    start,
-                    end,
-                    snapshot,
-                    context,
-                    hopper,
-                    queryGraph,
-                    queryTimeWeighting,
-                    roadClass,
-                    roadClassLink,
-                    roadEnvironment,
-                    referenceConstraint,
-                    releasesById,
-                    insidePath);
-            if (option != null) {
-                options.add(option);
-            }
-        }
-        return List.copyOf(options);
-    }
-
-    private ReferenceOption referenceOption(
-            SixthRingPortal.Direction direction,
-            Wgs84Coordinate start,
-            Wgs84Coordinate end,
-            RoutingSnapshot snapshot,
-            SixthRingRoutingContext context,
-            HardAvoidingGraphHopper hopper,
-            QueryGraph queryGraph,
-            Weighting queryTimeWeighting,
-            EnumEncodedValue<RoadClass> roadClass,
-            BooleanEncodedValue roadClassLink,
-            EnumEncodedValue<RoadEnvironment> roadEnvironment,
-            EdgeTraversalConstraint referenceConstraint,
-            Map<String, ControlReleasePoint> releasesById,
-            EdgeKeyMultiTargetDijkstra.PortalPath insidePath) {
-        ControlReleasePoint releasePoint = releasesById.get(insidePath.portal().id());
-        if (releasePoint == null) {
-            throw new IllegalStateException("selected control release point disappeared");
-        }
-        TracedRouteLeg safeRoute;
-        try {
-            safeRoute = RouteGeometryAssembler.insideLeg(
-                    queryGraph,
-                    queryTimeWeighting,
-                    insidePath,
-                    direction,
-                    hopper.getBaseGraph().getEdges(),
-                    roadClass,
-                    roadClassLink,
-                    roadEnvironment);
-        } catch (IllegalArgumentException exception) {
-            return null;
-        }
-        RouteLeg safeSegment = safeRoute.leg();
-
-        PortalAnchoredRoute anchoredRoute;
-        try {
-            anchoredRoute = PortalAnchoredRouteFinder.route(
-                    hopper,
-                    releasePoint,
-                    direction == OUTBOUND ? end : start,
-                    snapshot,
-                    referenceConstraint,
-                    context.routingWeighting(),
-                    properties.maxVisitedStates(),
-                    properties.searchTimeout());
-        } catch (RoutingEngineException exception) {
-            return null;
-        }
-        List<RouteTracePoint> initialTrace = actualDirectionTrace(
-                direction, safeRoute, anchoredRoute);
-        SixthRingPortal boundaryCrossing;
-        try {
-            boundaryCrossing = BOUNDARY_CROSSING_RESOLVER.resolve(
-                    direction, context.topology(), initialTrace);
-            anchoredRoute = RouteGeometryAssembler.insertCrossing(
-                    anchoredRoute, boundaryCrossing);
-        } catch (IllegalStateException exception) {
-            return null;
-        }
-        EngineRoute referenceRoute = anchoredRoute.route();
-        RouteLeg referenceSegment = new RouteLeg(
-                referenceRoute.distanceMeters(),
-                referenceRoute.durationMillis(),
-                referenceRoute.geometry());
-        double joinGap = direction == OUTBOUND
-                ? GeoDistance.meters(
-                        safeSegment.geometry().getLast(),
-                        referenceSegment.geometry().getFirst())
-                : GeoDistance.meters(
-                        referenceSegment.geometry().getLast(),
-                        safeSegment.geometry().getFirst());
-        List<RouteTracePoint> fullTrace = actualDirectionTrace(
-                direction, safeRoute, anchoredRoute);
-        if (joinGap > properties.maxJoinGapMeters()
-                || !ROUTE_SHAPE_VALIDATOR.isValid(
-                direction,
-                context.boundary(),
-                fullTrace,
-                context.roadClassification(),
-                context.tollCorridors(),
-                context.interchangeTopology())) {
-            return null;
-        }
-        List<Wgs84Coordinate> fullGeometry = direction == OUTBOUND
-                ? RouteGeometryAssembler.join(
-                        safeSegment.geometry(), referenceSegment.geometry())
-                : RouteGeometryAssembler.join(
-                        referenceSegment.geometry(), safeSegment.geometry());
-        return new ReferenceOption(
-                releasePoint,
                 boundaryCrossing,
+                navigationHandoff,
                 safeSegment,
-                referenceSegment,
-                safeSegment.distanceMeters() + referenceSegment.distanceMeters(),
-                safeSegment.durationMillis() + referenceSegment.durationMillis(),
-                fullGeometry,
-                fullTrace,
-                anchoredRoute);
+                null,
+                externalHandoff,
+                safeSegment.distanceMeters(),
+                safeSegment.durationMillis(),
+                safeSegment.geometry(),
+                safeRoute.trace(),
+                audit.edgeChecks(),
+                audit.virtualEdgeChecks(),
+                audit.blockedRejections());
     }
 
-    private static List<RouteTracePoint> actualDirectionTrace(
+    private static RouteLeg assembleSafeSegment(
             SixthRingPortal.Direction direction,
-            TracedRouteLeg safeRoute,
-            PortalAnchoredRoute anchoredRoute) {
+            RouteLeg insideLeg,
+            OuterHandoffWalker.Result handoff) {
+        List<Wgs84Coordinate> extension = handoff.path();
+        double extensionMeters = handoff.routeDistanceMeters();
+        long extensionMillis = Math.round(extensionMeters / 16.67);
         if (direction == OUTBOUND) {
-            return RouteTraceSupport.join(
-                    safeRoute.trace(),
-                    safeRoute.leg().geometry().size(),
-                    anchoredRoute.trace());
+            return new RouteLeg(
+                    insideLeg.distanceMeters() + extensionMeters,
+                    insideLeg.durationMillis() + extensionMillis,
+                    RouteGeometryAssembler.join(insideLeg.geometry(), extension));
         }
-        return RouteTraceSupport.join(
-                anchoredRoute.trace(),
-                anchoredRoute.route().geometry().size(),
-                safeRoute.trace());
-    }
-
-    private static HandoffSegments splitAtNavigationHandoff(
-            SixthRingPortal.Direction direction,
-            RouteLeg safeSegment,
-            RouteLeg referenceSegment,
-            NavigationHandoffPoint handoff) {
-        if (handoff.segment() == NavigationHandoffPoint.Segment.REFERENCE) {
-            SplitLeg split = splitLeg(referenceSegment, handoff);
-            if (direction == OUTBOUND) {
-                return new HandoffSegments(
-                        joinLegs(safeSegment, split.prefix()),
-                        split.suffix());
-            }
-            return new HandoffSegments(
-                    joinLegs(split.suffix(), safeSegment),
-                    split.prefix());
-        }
-
-        SplitLeg split = splitLeg(safeSegment, handoff);
-        if (direction == OUTBOUND) {
-            return new HandoffSegments(
-                    split.prefix(),
-                    joinLegs(split.suffix(), referenceSegment));
-        }
-        return new HandoffSegments(
-                split.suffix(),
-                joinLegs(referenceSegment, split.prefix()));
-    }
-
-    private static SplitLeg splitLeg(RouteLeg leg, NavigationHandoffPoint handoff) {
-        int handoffIndex = handoff.geometryIndex();
-        List<Wgs84Coordinate> geometry = leg.geometry();
-        if (handoffIndex <= 0 || handoffIndex >= geometry.size()
-                || (handoffIndex == geometry.size() - 1
-                        && handoff.fractionFromPrevious() >= 1)) {
-            throw new IllegalArgumentException("navigation handoff cannot be a segment endpoint");
-        }
-        double totalGeometryMeters = geometryDistance(geometry, 0, geometry.size() - 1);
-        double prefixGeometryMeters = geometryDistance(geometry, 0, handoffIndex - 1)
-                + GeoDistance.meters(geometry.get(handoffIndex - 1), handoff.coordinate());
-        double prefixRatio = totalGeometryMeters == 0
-                ? (double) handoffIndex / (geometry.size() - 1)
-                : prefixGeometryMeters / totalGeometryMeters;
-        double prefixDistanceMeters = leg.distanceMeters() * prefixRatio;
-        long prefixDurationMillis = Math.round(leg.durationMillis() * prefixRatio);
-        List<Wgs84Coordinate> prefixGeometry = new ArrayList<>(
-                geometry.subList(0, handoffIndex));
-        prefixGeometry.add(handoff.coordinate());
-        List<Wgs84Coordinate> suffixGeometry = new ArrayList<>();
-        suffixGeometry.add(handoff.coordinate());
-        int suffixStart = handoff.fractionFromPrevious() >= 1
-                ? handoffIndex + 1 : handoffIndex;
-        suffixGeometry.addAll(geometry.subList(suffixStart, geometry.size()));
-        RouteLeg prefix = new RouteLeg(
-                prefixDistanceMeters,
-                prefixDurationMillis,
-                prefixGeometry);
-        RouteLeg suffix = new RouteLeg(
-                leg.distanceMeters() - prefixDistanceMeters,
-                leg.durationMillis() - prefixDurationMillis,
-                suffixGeometry);
-        return new SplitLeg(prefix, suffix);
-    }
-
-    private static RouteLeg joinLegs(RouteLeg first, RouteLeg second) {
+        List<Wgs84Coordinate> reversedExtension = new ArrayList<>(extension);
+        java.util.Collections.reverse(reversedExtension);
         return new RouteLeg(
-                first.distanceMeters() + second.distanceMeters(),
-                first.durationMillis() + second.durationMillis(),
-                RouteGeometryAssembler.join(first.geometry(), second.geometry()));
+                insideLeg.distanceMeters() + extensionMeters,
+                insideLeg.durationMillis() + extensionMillis,
+                RouteGeometryAssembler.join(reversedExtension, insideLeg.geometry()));
     }
 
-    private static double geometryDistance(
-            List<Wgs84Coordinate> geometry,
-            int fromIndex,
-            int toIndex) {
-        double distance = 0;
-        for (int index = fromIndex + 1; index <= toIndex; index++) {
-            distance += GeoDistance.meters(geometry.get(index - 1), geometry.get(index));
+    private ScoredCandidate selectBest(
+            SixthRingPortal.Direction direction,
+            Wgs84Coordinate start,
+            Wgs84Coordinate end,
+            List<EdgeKeyMultiTargetDijkstra.PortalPath> candidates,
+            Map<String, ControlReleasePoint> releasesById) {
+        double threshold = direction == OUTBOUND
+                ? OUTBOUND_DIRECTION_THRESHOLD_DEGREES
+                : INBOUND_DIRECTION_THRESHOLD_DEGREES;
+        return selectBest(direction, start, end, candidates, releasesById, threshold);
+    }
+
+    private ScoredCandidate selectBest(
+            SixthRingPortal.Direction direction,
+            Wgs84Coordinate start,
+            Wgs84Coordinate end,
+            List<EdgeKeyMultiTargetDijkstra.PortalPath> candidates,
+            Map<String, ControlReleasePoint> releasesById,
+            double thresholdDegrees) {
+        ScoredCandidate best = null;
+        for (EdgeKeyMultiTargetDijkstra.PortalPath candidate : candidates) {
+            ControlReleasePoint releasePoint = releasesById.get(candidate.portal().id());
+            if (releasePoint == null) {
+                continue;
+            }
+            double delta = directionDeltaDegrees(direction, start, end, releasePoint);
+            if (delta > thresholdDegrees) {
+                continue;
+            }
+            double score = candidate.distanceMeters()
+                    + straightLineMeters(direction, start, end, releasePoint);
+            if (best == null
+                    || score < best.score()
+                    || (score == best.score()
+                    && (candidate.distanceMeters() < best.portalPath().distanceMeters()
+                    || (candidate.distanceMeters() == best.portalPath().distanceMeters()
+                    && releasePoint.id().compareTo(best.releasePoint().id()) < 0)))) {
+                best = new ScoredCandidate(candidate, releasePoint, delta, score);
+            }
         }
-        return distance;
+        return best;
     }
 
+    private static double straightLineMeters(
+            SixthRingPortal.Direction direction,
+            Wgs84Coordinate start,
+            Wgs84Coordinate end,
+            ControlReleasePoint releasePoint) {
+        Wgs84Coordinate outer = direction == OUTBOUND ? end : start;
+        return GeoDistance.meters(releasePoint.coordinate(), outer);
+    }
+
+    private static double directionDeltaDegrees(
+            SixthRingPortal.Direction direction,
+            Wgs84Coordinate start,
+            Wgs84Coordinate end,
+            ControlReleasePoint releasePoint) {
+        Wgs84Coordinate inside = direction == OUTBOUND ? start : end;
+        Wgs84Coordinate outer = direction == OUTBOUND ? end : start;
+        double referenceBearing = direction == OUTBOUND
+                ? bearingDegrees(inside, outer)
+                : bearingDegrees(outer, inside);
+        double candidateBearing = direction == OUTBOUND
+                ? bearingDegrees(inside, releasePoint.coordinate())
+                : bearingDegrees(outer, releasePoint.coordinate());
+        double delta = Math.abs(normalizeDegrees(referenceBearing - candidateBearing));
+        return Math.min(delta, 360 - delta);
+    }
+
+    private static double bearingDegrees(
+            Wgs84Coordinate from, Wgs84Coordinate to) {
+        double lat1 = Math.toRadians(from.lat());
+        double lat2 = Math.toRadians(to.lat());
+        double dLng = Math.toRadians(to.lng() - from.lng());
+        double y = Math.sin(dLng) * Math.cos(lat2);
+        double x = Math.cos(lat1) * Math.sin(lat2)
+                - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+        return normalizeDegrees(Math.toDegrees(Math.atan2(y, x)));
+    }
+
+    private static double normalizeDegrees(double degrees) {
+        double normalized = degrees % 360;
+        return normalized < 0 ? normalized + 360 : normalized;
+    }
     private static void rejectIncompleteSearch(
             EdgeKeyMultiTargetDijkstra.SearchResult search) {
         if (search.completion() == TIMEOUT || search.completion() == INTERRUPTED) {
@@ -663,25 +448,10 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
         }
     }
 
-    private record ReferenceOption(
+    private record ScoredCandidate(
+            EdgeKeyMultiTargetDijkstra.PortalPath portalPath,
             ControlReleasePoint releasePoint,
-            SixthRingPortal boundaryCrossing,
-            RouteLeg safeSegment,
-            RouteLeg referenceSegment,
-            double distanceMeters,
-            long durationMillis,
-            List<Wgs84Coordinate> geometry,
-            List<RouteTracePoint> trace,
-            PortalAnchoredRoute anchoredRoute) {
-    }
-
-    private record HandoffSegments(
-            RouteLeg safeSegment,
-            RouteLeg referenceSegment) {
-    }
-
-    private record SplitLeg(
-            RouteLeg prefix,
-            RouteLeg suffix) {
+            double directionDeltaDegrees,
+            double score) {
     }
 }

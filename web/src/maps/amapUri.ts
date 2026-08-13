@@ -22,3 +22,20 @@ export function buildAmapNavigationUri(data: HandoffMarkerData): string {
   });
   return `https://uri.amap.com/navigation?${params.toString()}`;
 }
+
+export function buildAmapPointNavigationUri(
+  from: { lng: number; lat: number },
+  fromName: string,
+  to: { lng: number; lat: number },
+  toName: string,
+): string {
+  const params = new URLSearchParams({
+    from: navigationPoint(from, fromName),
+    to: navigationPoint(to, toName),
+    mode: 'car',
+    policy: '0',
+    src: 'camera-safe-routing',
+    callnative: '1',
+  });
+  return `https://uri.amap.com/navigation?${params.toString()}`;
+}

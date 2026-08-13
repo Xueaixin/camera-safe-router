@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { ArrowUpDown, ChevronDown, Route } from '@lucide/vue';
 
 import PlaceInput from './PlaceInput.vue';
@@ -14,24 +14,29 @@ defineProps<{
 
 const emit = defineEmits<{ useCurrent: [] }>();
 const routeStore = useRouteStore();
-const isMobileLayout = ref(false);
 const collapsed = ref(false);
-
-onMounted(() => {
-  isMobileLayout.value = typeof window.matchMedia === 'function'
-    && window.matchMedia('(max-width: 899px)').matches;
-  collapsed.value = isMobileLayout.value;
-});
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value;
+}
+
+function isNarrowLayout(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 899px)').matches;
 }
 
 // 地图选点或“从当前位置重新规划”会更新起点/终点，此时自动展开搜索面板。
 watch(
   () => [routeStore.start, routeStore.end] as const,
   () => {
-    if (isMobileLayout.value) collapsed.value = false;
+    if (isNarrowLayout()) collapsed.value = false;
+  },
+);
+
+// 窄屏（移动端）规划成功后自动收起搜索面板；宽屏保持与底部面板连接，不收起。
+watch(
+  () => routeStore.state,
+  (state) => {
+    if (state === 'success' && isNarrowLayout()) collapsed.value = true;
   },
 );
 
@@ -45,13 +50,8 @@ function selectEnd(place: SelectedPlace) {
 </script>
 
 <template>
-  <section
-    class="search-panel"
-    :class="{ 'is-collapsed': collapsed }"
-    aria-label="路线起终点"
-  >
+  <section class="search-panel" :class="{ 'is-collapsed': collapsed }" aria-label="路线起终点">
     <button
-      v-if="isMobileLayout"
       class="search-panel__toggle"
       type="button"
       :aria-label="collapsed ? '展开搜索面板' : '收起搜索面板'"
@@ -78,7 +78,7 @@ function selectEnd(place: SelectedPlace) {
       </template>
     </button>
 
-    <template v-if="!collapsed">
+    <div class="search-panel__body" :class="{ 'is-hidden': collapsed }">
       <div class="endpoint-fields">
         <PlaceInput
           id="route-start"
@@ -123,10 +123,15 @@ function selectEnd(place: SelectedPlace) {
         data-testid="plan-route"
         @click="routeStore.plan()"
       >
-        <span v-if="routeStore.isPlanning && routeStore.planningKind === 'initial'" class="spinner" />
+        <span
+          v-if="routeStore.isPlanning && routeStore.planningKind === 'initial'"
+          class="spinner"
+        />
         <Route v-else :size="18" aria-hidden="true" />
-        {{ routeStore.isPlanning && routeStore.planningKind === 'initial' ? '正在规划' : '规划路线' }}
+        {{
+          routeStore.isPlanning && routeStore.planningKind === 'initial' ? '正在规划' : '规划路线'
+        }}
       </button>
-    </template>
+    </div>
   </section>
 </template>

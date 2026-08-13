@@ -54,18 +54,32 @@ test('cross-boundary route keeps the handoff marker and switches to the inner se
 }) => {
   await page.goto('/?mockScenario=cross-boundary&mockDelay=0');
   await planCrossBoundaryRoute(page);
+  if ((page.viewportSize()?.width ?? 0) < 900) {
+    await expect(page.getByTestId('search-panel-toggle')).toHaveAttribute('aria-expanded', 'false');
+  }
 
   const map = page.getByTestId('map-container');
   await expect(map).toHaveAttribute('data-handoff-marker', 'outbound');
-  await expect(map).toHaveAttribute('data-route-points', '5');
+  await expect(map).toHaveAttribute('data-route-points', '4');
   await expect(page.getByTestId('route-summary')).toContainText('116 公里');
+  await expect(page.getByTestId('external-route-summary')).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByTestId('external-route-tab-0')).toContainText('公里');
+  await expect(page.getByTestId('external-route-tab-1')).toBeVisible();
+  await page.getByTestId('external-route-tab-1').click();
+  await expect(map).toHaveAttribute('data-selected-external-route', '1');
+  await page.getByTestId('external-route-tab-0').click();
+  await expect(map).toHaveAttribute('data-selected-external-route', '0');
 
   await page.getByTestId('show-safe-route').click();
   await expect(map).toHaveAttribute('data-route-points', '4');
   await expect(page.getByTestId('route-summary')).toContainText('29 公里');
+  await expect(page.getByTestId('external-route-summary')).toBeHidden();
   await expect(map).toHaveAttribute('data-handoff-marker', 'outbound');
 
   await page.getByTestId('show-full-route').click();
+  await expect(page.getByTestId('external-route-summary')).toBeVisible();
   const canvas = page.locator('.mock-map__canvas');
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
@@ -80,6 +94,10 @@ test('cross-boundary route keeps the handoff marker and switches to the inner se
   await expect(popup).toContainText('附近地标：北京市昌平区小汤山镇阿苏卫收费站附近');
   const navigationLink = page.getByTestId('open-amap-navigation');
   await expect(navigationLink).toHaveAttribute('href', /uri\.amap\.com\/navigation/);
+  const navigationHref = (await navigationLink.getAttribute('href')) ?? '';
+  const navigationUrl = new URL(navigationHref);
+  expect(navigationUrl.searchParams.get('from')).toBe('116.46,39.935,环内路线交接点');
+  expect(navigationUrl.searchParams.get('to')).toBe('117.21,39.136,环外行程终点');
   await expect(page.getByTestId('copy-handoff-landmark')).toBeEnabled();
   await page.getByTestId('copy-handoff-landmark').click();
   await expect(popup).toContainText('地标描述已复制');
@@ -165,6 +183,12 @@ test('failed manual rerouting retains the old route and original start', async (
   await page.getByTestId('reroute-button').click();
   await expect(page.getByTestId('map-container')).toHaveAttribute('data-route-points', '4');
   await expect(page.getByTestId('route-error')).toContainText('原路线仍保留');
+  if ((page.viewportSize()?.width ?? 0) < 900) {
+    const toggle = page.getByTestId('search-panel-toggle');
+    if ((await toggle.getAttribute('aria-expanded')) === 'false') {
+      await toggle.click();
+    }
+  }
   await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue('天安门广场');
   await expect(page.getByTestId('map-container')).toHaveAttribute('data-route-points', '4');
 });
@@ -226,7 +250,7 @@ test('mobile search panel expands after a map point start selection', async ({ p
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   const toggle = page.getByTestId('search-panel-toggle');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   const canvas = page.locator('.mock-map__canvas');
   const box = await canvas.boundingBox();
   expect(box).not.toBeNull();
@@ -236,6 +260,24 @@ test('mobile search panel expands after a map point start selection', async ({ p
   await page.getByTestId('set-start-from-map').click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('combobox', { name: '搜索起点' })).toHaveValue(/地图选点/);
+});
+
+test('search panel follows layout width changes', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto('/');
+  await expect(page.getByTestId('search-panel-toggle')).toBeHidden();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const toggle = page.getByTestId('search-panel-toggle');
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(toggle).toBeHidden();
+  await expect(page.getByRole('combobox', { name: '搜索起点' })).toBeVisible();
 });
 
 test('mobile route sheet handle does not render a chevron', async ({ page }) => {

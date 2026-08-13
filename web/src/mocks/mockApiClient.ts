@@ -1,5 +1,6 @@
 import {
   buildMockCrossBoundaryRoute,
+  buildMockExternalOnlyRoute,
   buildMockRoute,
   mockApiError,
   MOCK_CAMERA_PAGE,
@@ -38,6 +39,7 @@ export type MockScenario =
   | 'protocol-conflict'
   | 'invalid-geometry'
   | 'cross-boundary'
+  | 'external-only'
   | 'reroute-failure';
 
 export interface MockApiOptions {
@@ -59,6 +61,7 @@ function scenarioFromLocation(): MockScenario {
     'protocol-conflict',
     'invalid-geometry',
     'cross-boundary',
+    'external-only',
     'reroute-failure',
   ];
   return scenarios.includes(value as MockScenario) ? (value as MockScenario) : 'success';
@@ -121,7 +124,9 @@ export class MockApiClient implements ApiClient {
     const response =
       this.scenario === 'cross-boundary'
         ? buildMockCrossBoundaryRoute(request, routeId)
-        : buildMockRoute(request, routeId);
+        : this.scenario === 'external-only'
+          ? buildMockExternalOnlyRoute(request, routeId)
+          : buildMockRoute(request, routeId);
     if (this.scenario === 'protocol-conflict') {
       return parseRouteResponse({ ...response, cameraConflictCount: 1 });
     }

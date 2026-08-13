@@ -238,7 +238,7 @@ export function parseRouteResponse(value: unknown): RouteResponse {
     navigationHandoff === null &&
     externalHandoff === null &&
     safeSegment === null &&
-    referenceSegment !== null;
+    referenceSegment === null;
   const expectedDirection =
     mode === 'CROSS_BOUNDARY_OUTBOUND'
       ? 'OUTBOUND'
@@ -255,14 +255,10 @@ export function parseRouteResponse(value: unknown): RouteResponse {
     navigationHandoff === null ||
     (expectedDirection === 'OUTBOUND'
       ? safeSegment?.geometry.at(-1)?.lng === navigationHandoff.gcj02.lng &&
-        safeSegment?.geometry.at(-1)?.lat === navigationHandoff.gcj02.lat &&
-        referenceSegment?.geometry[0]?.lng === navigationHandoff.gcj02.lng &&
-        referenceSegment?.geometry[0]?.lat === navigationHandoff.gcj02.lat
+        safeSegment?.geometry.at(-1)?.lat === navigationHandoff.gcj02.lat
       : expectedDirection === 'INBOUND' &&
         safeSegment?.geometry[0]?.lng === navigationHandoff.gcj02.lng &&
-        safeSegment?.geometry[0]?.lat === navigationHandoff.gcj02.lat &&
-        referenceSegment?.geometry.at(-1)?.lng === navigationHandoff.gcj02.lng &&
-        referenceSegment?.geometry.at(-1)?.lat === navigationHandoff.gcj02.lat);
+        safeSegment?.geometry[0]?.lat === navigationHandoff.gcj02.lat);
   const handoffPairMatches = (navigationHandoff === null) === (externalHandoff === null);
   const handoffCoordinatesMatch =
     navigationHandoff === null ||
@@ -281,7 +277,6 @@ export function parseRouteResponse(value: unknown): RouteResponse {
     crossing?.direction === expectedDirection &&
     crossing?.boundaryRole === expectedRole &&
     safeSegment !== null &&
-    referenceSegment !== null &&
     handoffPairMatches &&
     handoffCoordinatesMatch &&
     handoffTypeMatches &&

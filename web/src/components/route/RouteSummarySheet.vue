@@ -16,7 +16,10 @@ import RouteSteps from './RouteSteps.vue';
 import { LOCATION_POLICY } from '@/config/locationPolicy';
 import { useLocationStore } from '@/stores/locationStore';
 import { useRouteStore } from '@/stores/routeStore';
+import { buildAmapPointNavigationUri } from '@/maps/amapUri';
+import type { SelectedPlace } from '@/types/coordinate';
 import { formatDistance, formatDuration, formatSnapshotVersion } from '@/utils/format';
+import { wgs84ToGcj02 } from '@/utils/wgs84ToGcj02';
 
 const routeStore = useRouteStore();
 const locationStore = useLocationStore();
@@ -63,10 +66,48 @@ watch(
 function retry() {
   if (routeStore.lastAttemptKind === 'reroute') {
     // 重新规划已移至地图侧边工具栏，底部仅保留失败重试入口。
-    if (locationStore.browserLocation) void routeStore.rerouteFromLocation(locationStore.browserLocation);
-  }
-  else void routeStore.plan();
+    if (locationStore.browserLocation)
+      void routeStore.rerouteFromLocation(locationStore.browserLocation);
+  } else void routeStore.plan();
 }
+
+function gcj02ForPlace(place: SelectedPlace | null): { lng: number; lat: number } | null {
+  if (!place) return null;
+  const coordinate = place.coordinate;
+  return coordinate.coordinateSystem === 'GCJ02'
+    ? { lng: coordinate.lng, lat: coordinate.lat }
+    : wgs84ToGcj02(coordinate.lng, coordinate.lat);
+}
+
+function externalNavigationUri(): string | null {
+  const route = routeStore.route;
+  if (!route || route.planningMode !== 'EXTERNAL_ONLY') return null;
+  const from = gcj02ForPlace(routeStore.start);
+  const to = gcj02ForPlace(routeStore.end);
+  if (!from || !to) return null;
+  return buildAmapPointNavigationUri(
+    from,
+    routeStore.start?.name || '起点',
+    to,
+    routeStore.end?.name || '终点',
+  );
+}
+
+const externalNavigationUrl = computed(() => externalNavigationUri());
+
+const externalPending = computed(
+  () =>
+    routeStore.isCrossBoundary &&
+    routeStore.routeView === 'full' &&
+    routeStore.externalRouteState === 'loading' &&
+    routeStore.externalRoutes.length === 0,
+);
+const displayTimeText = computed(() =>
+  externalPending.value ? '计算中…' : formatDuration(routeStore.displayDurationSeconds),
+);
+const displayDistanceText = computed(() =>
+  externalPending.value ? '计算中…' : formatDistance(routeStore.displayDistanceMeters),
+);
 </script>
 
 <template>
@@ -91,11 +132,11 @@ function retry() {
         <div class="route-metrics">
           <div>
             <Clock3 :size="17" aria-hidden="true" />
-            <span>{{ formatDuration(routeStore.displayDurationSeconds) }}</span>
+            <span>{{ displayTimeText }}</span>
           </div>
           <div>
             <MapPinned :size="17" aria-hidden="true" />
-            <span>{{ formatDistance(routeStore.displayDistanceMeters) }}</span>
+            <span>{{ displayDistanceText }}</span>
           </div>
           <div class="route-metrics__safe">
             <ShieldCheck :size="17" aria-hidden="true" />
@@ -174,6 +215,58 @@ function retry() {
           </span>
         </div>
 
+        <div
+          v-if="routeStore.externalRoutes.length > 0 && routeStore.routeView === 'full'"
+          class="route-external"
+          data-testid="external-route-summary"
+        >
+          <div class="route-external__label">界外参考路线</div>
+          <div class="route-external__tabs" role="tablist" aria-label="界外备选路线">
+            <button
+              v-for="(externalRoute, index) in routeStore.externalRoutes"
+              :key="externalRoute.id"
+              type="button"
+              role="tab"
+              :aria-selected="index === routeStore.selectedExternalRoute"
+              :class="{ 'is-active': index === routeStore.selectedExternalRoute }"
+              :data-testid="`external-route-tab-${index}`"
+              @click="routeStore.selectExternalRoute(index)"
+            >
+              <span class="route-external__tab-distance">
+                {{ formatDistance(externalRoute.distanceMeters) }}
+              </span>
+              <span class="route-external__tab-duration">
+                {{ formatDuration(externalRoute.durationSeconds) }}
+              </span>
+            </button>
+          </div>
+          <small class="route-external__note">参考路线由 OSM 提供，实际以高德导航为准</small>
+        </div>
+        <div
+          v-else-if="routeStore.routeView === 'full' && routeStore.externalRouteState === 'loading'"
+          class="route-external"
+          data-testid="external-route-loading"
+        >
+          正在加载界外参考路线…
+        </div>
+        <div
+          v-else-if="routeStore.routeView === 'full' && routeStore.externalRouteState === 'error'"
+          class="route-external route-external--error"
+          data-testid="external-route-error"
+        >
+          界外参考路线加载失败：{{ routeStore.externalRouteError }}
+        </div>
+        <a
+          v-if="externalNavigationUrl"
+          class="button button--secondary button--compact route-external__navigate"
+          :href="externalNavigationUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="external-only-navigation"
+        >
+          高德导航
+        </a>
+
         <button
           v-if="routeStore.routeView === 'full' && routeStore.route.steps.length"
           class="steps-toggle"
@@ -227,7 +320,6 @@ function retry() {
           {{ LOCATION_POLICY.maximumAccuracyMeters }} 米以内。
         </span>
       </div>
-
     </div>
   </section>
 </template>

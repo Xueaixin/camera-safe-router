@@ -2,8 +2,10 @@
 import { onBeforeUnmount, watch } from 'vue';
 
 import { useRouteStore } from '@/stores/routeStore';
+import type { OutputCoordinate } from '@/types/api';
 import type { SelectedPlace } from '@/types/coordinate';
 import type { MapAdapter } from '@/types/map';
+import { wgs84ToGcj02 } from '@/utils/wgs84ToGcj02';
 
 const props = defineProps<{ map: MapAdapter }>();
 const routeStore = useRouteStore();
@@ -45,15 +47,31 @@ function displayedEndpoints(): [SelectedPlace | null, SelectedPlace | null] {
     : [handoff, withGcj02Fallback(routeStore.end, geometry.at(-1))];
 }
 
+function gcj02Endpoint(place: SelectedPlace | null): OutputCoordinate | undefined {
+  if (!place) return undefined;
+  const coordinate = place.coordinate;
+  return coordinate.coordinateSystem === 'GCJ02'
+    ? { lng: coordinate.lng, lat: coordinate.lat }
+    : wgs84ToGcj02(coordinate.lng, coordinate.lat);
+}
+
 watch(
-  () => [routeStore.start, routeStore.end, routeStore.route, routeStore.routeView] as const,
+  () =>
+    [
+      routeStore.start,
+      routeStore.end,
+      routeStore.route,
+      routeStore.routeView,
+      routeStore.externalRoutes,
+      routeStore.selectedExternalRoute,
+    ] as const,
   () => {
     const route = routeStore.route;
     const [start, end] = displayedEndpoints();
     const outerEndpoint = route
       ? route.boundaryDirection === 'OUTBOUND'
-        ? route.geometry.at(-1)
-        : route.geometry[0]
+        ? gcj02Endpoint(routeStore.end)
+        : gcj02Endpoint(routeStore.start)
       : undefined;
     props.map.setEndpointMarkers(start, end);
     props.map.setHandoffMarker(
@@ -71,9 +89,33 @@ watch(
       fittedRouteId = null;
       return;
     }
-    const geometry = routeStore.displayGeometry;
-    props.map.setRoute(geometry);
-    const displayRouteId = `${route.routeId}:${routeStore.routeView}`;
+    const isExternalOnly = route.planningMode === 'EXTERNAL_ONLY';
+    const isCrossBoundary =
+      route.planningMode === 'CROSS_BOUNDARY_OUTBOUND' ||
+      route.planningMode === 'CROSS_BOUNDARY_INBOUND';
+    const showExternal = isExternalOnly || (isCrossBoundary && routeStore.routeView === 'full');
+    const external = showExternal ? routeStore.externalRoutes : [];
+    const selectedExternal = external[routeStore.selectedExternalRoute] ?? null;
+    props.map.setExternalRoutes(
+      external.length > 0 ? external : null,
+      routeStore.selectedExternalRoute,
+      routeStore.selectExternalRoute,
+    );
+    if (isExternalOnly) {
+      props.map.setRoute([]);
+    } else {
+      props.map.setRoute(routeStore.displayGeometry);
+    }
+    const geometry = ((): OutputCoordinate[] => {
+      if (isExternalOnly) {
+        return selectedExternal?.geometry ?? route.geometry;
+      }
+      if (showExternal && selectedExternal) {
+        return [...routeStore.displayGeometry, ...selectedExternal.geometry];
+      }
+      return routeStore.displayGeometry;
+    })();
+    const displayRouteId = `${route.routeId}:${routeStore.routeView}:${routeStore.selectedExternalRoute}`;
     if (fittedRouteId !== displayRouteId) {
       props.map.fitRoute(geometry);
       fittedRouteId = displayRouteId;

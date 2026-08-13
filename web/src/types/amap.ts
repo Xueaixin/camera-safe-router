@@ -35,6 +35,7 @@ export interface AmapMarker extends AmapOverlay {
 
 export interface AmapPolyline extends AmapOverlay {
   setPath(path: [number, number][]): void;
+  on(event: string, handler: (event?: unknown) => void): void;
 }
 
 export type AmapPolygon = AmapOverlay;

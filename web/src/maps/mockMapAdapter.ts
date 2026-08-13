@@ -8,6 +8,7 @@ import { buildAmapNavigationUri } from './amapUri';
 import type { CameraView, ControlledArea, OutputCoordinate } from '@/types/api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from '@/types/coordinate';
 import type {
+  ExternalRoute,
   HandoffMarkerData,
   MapAdapter,
   MapAdapterCallbacks,
@@ -29,6 +30,9 @@ export class MockMapAdapter implements MapAdapter {
   private callbacks: MapAdapterCallbacks | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private route: OutputCoordinate[] = [];
+  private externalRoutes: ExternalRoute[] = [];
+  private selectedExternalRoute = 0;
+  private externalRouteSelectHandler: ((index: number) => void) | null = null;
   private cameras: CameraView[] = [];
   private controlledArea: ControlledArea | null = null;
   private start: SelectedPlace | null = null;
@@ -117,9 +121,27 @@ export class MockMapAdapter implements MapAdapter {
     this.draw();
   }
 
+  setExternalRoutes(
+    routes: ExternalRoute[] | null,
+    selectedIndex: number,
+    onSelect?: (index: number) => void,
+  ) {
+    this.externalRoutes = routes ?? [];
+    this.selectedExternalRoute = selectedIndex;
+    this.externalRouteSelectHandler = onSelect ?? null;
+    if (this.container) {
+      this.container.dataset.externalRouteCount = String(this.externalRoutes.length);
+      this.container.dataset.selectedExternalRoute = String(selectedIndex);
+    }
+    this.draw();
+  }
+
   clearRoute() {
     this.route = [];
+    this.externalRoutes = [];
+    this.externalRouteSelectHandler = null;
     if (this.container) this.container.dataset.routePoints = '0';
+    if (this.container) this.container.dataset.externalRouteCount = '0';
     this.draw();
   }
 
@@ -290,6 +312,14 @@ export class MockMapAdapter implements MapAdapter {
     }
     this.drawControlledArea(context, width, height);
     this.drawPath(context, this.route, width, height);
+    this.externalRoutes.forEach((route, index) => {
+      const selected = index === this.selectedExternalRoute;
+      this.drawPath(context, route.geometry, width, height, {
+        color: selected ? '#1769e0' : '#8fb0d8',
+        width: 7,
+        opacity: 1,
+      });
+    });
     this.cameras.forEach((camera) => this.drawPoint(context, camera, width, height, '#dc3f35', 5));
     if (this.pendingSelection) {
       this.drawPoint(context, this.pendingSelection, width, height, '#1769e0', 7);
@@ -314,6 +344,7 @@ export class MockMapAdapter implements MapAdapter {
     geometry: OutputCoordinate[],
     width: number,
     height: number,
+    style?: { color: string; width: number; opacity: number },
   ) {
     if (geometry.length < 2) return;
     context.beginPath();
@@ -322,18 +353,16 @@ export class MockMapAdapter implements MapAdapter {
       if (index === 0) context.moveTo(x, y);
       else context.lineTo(x, y);
     });
-    context.strokeStyle = '#1769e0';
-    context.lineWidth = 7;
+    context.strokeStyle = style?.color ?? '#1769e0';
+    context.lineWidth = style?.width ?? 7;
+    context.globalAlpha = style?.opacity ?? 1;
     context.lineCap = 'round';
     context.lineJoin = 'round';
     context.stroke();
+    context.globalAlpha = 1;
   }
 
-  private drawControlledArea(
-    context: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-  ) {
+  private drawControlledArea(context: CanvasRenderingContext2D, width: number, height: number) {
     if (!this.controlledArea) return;
     this.controlledArea.geometry.coordinates.forEach((polygon) => {
       context.beginPath();

@@ -91,7 +91,7 @@ public record PlannedRoute(
                     direction, crossing, navigationHandoff, safe, reference, externalHandoff);
             case EXTERNAL_ONLY -> {
                 if (direction != null || crossing != null || navigationHandoff != null || safe != null
-                        || reference == null || externalHandoff != null) {
+                        || reference != null || externalHandoff != null) {
                     throw new IllegalArgumentException("invalid EXTERNAL_ONLY route shape");
                 }
             }
@@ -110,7 +110,7 @@ public record PlannedRoute(
         if (direction != expectedDirection || crossing == null
                 || crossing.direction() != expectedDirection
                 || crossing.boundaryRole() != expectedRole
-                || safe == null || reference == null
+                || safe == null
                 || (navigationHandoff == null) != (externalHandoff == null)) {
             throw new IllegalArgumentException("invalid cross-boundary route shape");
         }
@@ -118,13 +118,9 @@ public record PlannedRoute(
             Wgs84Coordinate safeJoin = expectedDirection == SixthRingPortal.Direction.OUTBOUND
                     ? safe.geometry().getLast()
                     : safe.geometry().getFirst();
-            Wgs84Coordinate referenceJoin = expectedDirection == SixthRingPortal.Direction.OUTBOUND
-                    ? reference.geometry().getFirst()
-                    : reference.geometry().getLast();
-            if (!navigationHandoff.coordinate().equals(safeJoin)
-                    || !navigationHandoff.coordinate().equals(referenceJoin)) {
+            if (!navigationHandoff.coordinate().equals(safeJoin)) {
                 throw new IllegalArgumentException(
-                        "navigation handoff must equal the safe/reference segment join");
+                        "navigation handoff must equal the safe segment join");
             }
         }
     }

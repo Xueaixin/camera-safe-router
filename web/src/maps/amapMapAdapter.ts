@@ -20,6 +20,7 @@ import type {
 import type { CameraView, ControlledArea, OutputCoordinate } from '@/types/api';
 import type { Coordinate, DisplayLocation, SelectedPlace } from '@/types/coordinate';
 import type {
+  ExternalRoute,
   HandoffMarkerData,
   MapAdapter,
   MapAdapterCallbacks,
@@ -146,6 +147,8 @@ export class AmapMapAdapter implements MapAdapter {
   private handoffData: HandoffMarkerData | null = null;
   private handoffDescription: Promise<string> | null = null;
   private routePolyline: AmapPolyline | null = null;
+  private externalPolylines: AmapPolyline[] = [];
+  private externalSelectHandler: ((index: number) => void) | null = null;
   private cameraLayer: AmapMassMarks | null = null;
   private cameraDataKey: string | null = null;
   private controlledAreaPolygons: AmapPolygon[] = [];
@@ -325,15 +328,50 @@ export class AmapMapAdapter implements MapAdapter {
     }
   }
 
+  setExternalRoutes(
+    routes: ExternalRoute[] | null,
+    selectedIndex: number,
+    onSelect?: (index: number) => void,
+  ) {
+    this.externalPolylines.forEach((polyline) => polyline.setMap(null));
+    this.externalPolylines = [];
+    this.externalSelectHandler = onSelect ?? null;
+    if (!this.amap || !this.map || !routes || routes.length === 0) return;
+    routes.forEach((route, index) => {
+      const selected = index === selectedIndex;
+      const polyline = new this.amap!.Polyline({
+        map: this.map!,
+        path: route.geometry.map(lngLatTuple),
+        strokeColor: selected ? '#1769e0' : '#8fb0d8',
+        strokeWeight: 7,
+        strokeOpacity: selected ? 0.95 : 1,
+        lineJoin: 'round',
+        lineCap: 'round',
+        zIndex: selected ? 41 : 39,
+      });
+      if (!selected && onSelect) {
+        polyline.on('click', (event?: unknown) => {
+          (event as { stopPropagation?: () => void } | undefined)?.stopPropagation?.();
+          onSelect(index);
+        });
+      }
+      this.externalPolylines.push(polyline);
+    });
+  }
+
   clearRoute() {
     this.routePolyline?.setMap(null);
     this.routePolyline = null;
+    this.externalPolylines.forEach((polyline) => polyline.setMap(null));
+    this.externalPolylines = [];
+    this.externalSelectHandler = null;
   }
 
   fitRoute(geometry: OutputCoordinate[]) {
     if (!this.map || geometry.length < 2) return;
     const overlays = [
       this.routePolyline,
+      ...this.externalPolylines,
       this.startMarker,
       this.endMarker,
       this.handoffMarker,

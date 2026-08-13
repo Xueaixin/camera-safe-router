@@ -94,13 +94,17 @@ export const MOCK_CONTROLLED_AREA: ControlledArea = {
   coordinateSystem: 'GCJ02',
   geometry: {
     type: 'MultiPolygon',
-    coordinates: [[[
-      { lng: 116.29, lat: 39.84 },
-      { lng: 116.53, lat: 39.84 },
-      { lng: 116.53, lat: 40.02 },
-      { lng: 116.29, lat: 40.02 },
-      { lng: 116.29, lat: 39.84 },
-    ]]],
+    coordinates: [
+      [
+        [
+          { lng: 116.29, lat: 39.84 },
+          { lng: 116.53, lat: 39.84 },
+          { lng: 116.53, lat: 40.02 },
+          { lng: 116.29, lat: 40.02 },
+          { lng: 116.29, lat: 39.84 },
+        ],
+      ],
+    ],
   },
   approvedForProduction: false,
   cameraOutsideMarginMeters: 50,
@@ -171,11 +175,9 @@ export function buildMockCrossBoundaryRoute(
       ? { lng: coordinate.lng + 0.0065, lat: coordinate.lat + 0.0015 }
       : { lng: coordinate.lng, lat: coordinate.lat };
   const start = displayCoordinate(request.start);
-  const end = displayCoordinate(request.end);
   const crossing = { lng: 116.445, lat: 39.94 };
   const handoff = { lng: 116.46, lat: 39.935 };
   const safeGeometry = [start, { lng: 116.425, lat: 39.925 }, crossing, handoff];
-  const referenceGeometry = [handoff, end];
   return {
     routeId,
     coordinateSystem: 'GCJ02',
@@ -208,17 +210,13 @@ export function buildMockCrossBoundaryRoute(
       durationSeconds: 2520,
       geometry: safeGeometry,
     },
-    referenceSegment: {
-      distanceMeters: 86600,
-      durationSeconds: 4920,
-      geometry: referenceGeometry,
-    },
-    distanceMeters: 115800,
-    durationSeconds: 7440,
+    referenceSegment: null,
+    distanceMeters: 29200,
+    durationSeconds: 2520,
     cameraConflictCount: 0,
     cameraSnapshotVersion: 'fixture-camera-v1',
     blockedEdgeVersion: 'fixture-blocked-v1',
-    geometry: [...safeGeometry, end],
+    geometry: safeGeometry,
     steps: [
       {
         instruction: '沿合规道路驶出六环',
@@ -230,12 +228,43 @@ export function buildMockCrossBoundaryRoute(
       },
       {
         instruction: '继续前往终点',
-        distanceMeters: 87200,
-        durationSeconds: 4980,
-        startIndex: 2,
-        endIndex: 4,
+        distanceMeters: 0,
+        durationSeconds: 0,
+        startIndex: 3,
+        endIndex: 3,
       },
     ],
+  };
+}
+
+export function buildMockExternalOnlyRoute(
+  request: RouteRequest,
+  routeId = 'route-fixture-external-001',
+): RouteResponse {
+  const displayCoordinate = (coordinate: RouteRequest['start']) =>
+    coordinate.coordinateSystem === 'WGS84'
+      ? { lng: coordinate.lng + 0.0065, lat: coordinate.lat + 0.0015 }
+      : { lng: coordinate.lng, lat: coordinate.lat };
+  const start = displayCoordinate(request.start);
+  const end = displayCoordinate(request.end);
+  return {
+    routeId,
+    coordinateSystem: 'GCJ02',
+    planningMode: 'EXTERNAL_ONLY',
+    boundaryVersion: 'fixture-sixth-ring-v1',
+    boundaryDirection: null,
+    boundaryCrossing: null,
+    navigationHandoff: null,
+    externalHandoff: null,
+    safeSegment: null,
+    referenceSegment: null,
+    distanceMeters: 0,
+    durationSeconds: 0,
+    cameraConflictCount: 0,
+    cameraSnapshotVersion: 'fixture-camera-v1',
+    blockedEdgeVersion: 'fixture-blocked-v1',
+    geometry: [start, end],
+    steps: [],
   };
 }
 
