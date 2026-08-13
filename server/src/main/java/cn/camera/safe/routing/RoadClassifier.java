@@ -12,6 +12,8 @@ import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.BaseGraph;
 import com.graphhopper.storage.NodeAccess;
 import com.graphhopper.util.FetchMode;
+import com.graphhopper.util.EdgeExplorer;
+import com.graphhopper.util.EdgeIterator;
 import com.graphhopper.util.PointList;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -21,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -179,6 +182,11 @@ final class RoadClassifier {
                 connectors.releasedConnectorEdges().cardinality(),
                 connectors.sixthExitConnectorEdgeKeys().cardinality(),
                 connectors.tongzhouHighwayConnectorEdges().cardinality());
+        BitSet tongzhouCheckpointBypassEdges = detectTongzhouCheckpointBypasses(
+                graph, carAccess, roadClass, roadClassLink,
+                tongzhouOutsideSixthEdges, allHighwayMainlineEdges);
+        LOGGER.info("道路分类 通州检查站绕行辅路边={}",
+                tongzhouCheckpointBypassEdges.cardinality());
         RoadClassificationAudit audit = new RoadClassificationAudit(
                 sixthRingRelationEdges,
                 sixthRingMainlineEdges,
@@ -253,6 +261,7 @@ final class RoadClassifier {
         append(identity, "tongzhou-connectors", connectors.tongzhouHighwayConnectorEdges());
         append(identity, "rht-entry-keys", interchangeTopology.htToREdgeKeys());
         append(identity, "rht-exit-keys", interchangeTopology.rToHtEdgeKeys());
+        append(identity, "tongzhou-checkpoint-bypass", tongzhouCheckpointBypassEdges);
         return new RoadClassification(
                 new RoadClassificationIndex(
                         cameraExemptMainlineEdges,
@@ -270,6 +279,7 @@ final class RoadClassifier {
                         connectors.tongzhouHighwayConnectorEdges(),
                         interchangeTopology.htToREdgeKeys(),
                         interchangeTopology.rToHtEdgeKeys(),
+                        tongzhouCheckpointBypassEdges,
                         "sha256:" + Hashing.sha256(identity.toString())),
                 audit,
                 tollCorridors,
@@ -454,6 +464,148 @@ final class RoadClassifier {
             coordinates[index] = new Coordinate(points.getLon(index), points.getLat(index));
         }
         return GEOMETRY_FACTORY.createLineString(coordinates);
+    }
+
+    /**
+     * 识别通州境内高速检查站绕行辅路：高速主路被 OSM 标为 access=no（检查站导致主路封闭），
+     * 两端仍连接可行驶高速，中间由平行 service 辅路衔接。把这些辅路边标记为
+     * “通州检查站绕行辅路”，released 寻路阶段允许通行。
+     */
+    private static BitSet detectTongzhouCheckpointBypasses(
+            BaseGraph graph,
+            BooleanEncodedValue carAccess,
+            EnumEncodedValue<RoadClass> roadClass,
+            BooleanEncodedValue roadClassLink,
+            BitSet tongzhouOutsideSixthEdges,
+            BitSet allHighwayMainlineEdges) {
+        BitSet bypassEdges = new BitSet(graph.getEdges());
+        UnionFind components = new UnionFind();
+        Map<Integer, List<Integer>> noAccessEdgesByNode = new HashMap<>();
+        AllEdgesIterator edges = graph.getAllEdges();
+        while (edges.next()) {
+            int edgeId = edges.getEdge();
+            if (!tongzhouOutsideSixthEdges.get(edgeId)
+                    || edges.get(roadClass) != RoadClass.MOTORWAY
+                    || edges.get(roadClassLink)
+                    || edges.get(carAccess) || edges.getReverse(carAccess)) {
+                continue;
+            }
+            components.union(edges.getBaseNode(), edges.getAdjNode());
+            noAccessEdgesByNode.computeIfAbsent(
+                    edges.getBaseNode(), ignored -> new ArrayList<>()).add(edgeId);
+            noAccessEdgesByNode.computeIfAbsent(
+                    edges.getAdjNode(), ignored -> new ArrayList<>()).add(edgeId);
+        }
+        Map<Integer, Set<Integer>> componentNodes = new HashMap<>();
+        Map<Integer, Set<Integer>> componentNoAccessEdges = new HashMap<>();
+        for (int node : noAccessEdgesByNode.keySet()) {
+            int root = components.find(node);
+            componentNodes.computeIfAbsent(root, ignored -> new HashSet<>()).add(node);
+            componentNoAccessEdges.computeIfAbsent(root, ignored -> new HashSet<>())
+                    .addAll(noAccessEdgesByNode.get(node));
+        }
+        for (Map.Entry<Integer, Set<Integer>> entry : componentNodes.entrySet()) {
+            Set<Integer> noAccess = componentNoAccessEdges.get(entry.getKey());
+            List<Integer> endNodes = entry.getValue().stream()
+                    .filter(node -> hasDrivableMotorwayNeighbor(
+                            graph, carAccess, roadClass, roadClassLink, node, noAccess))
+                    .toList();
+            if (endNodes.size() != 2) {
+                continue;
+            }
+            Set<Integer> nodesA = reachableNodesWithin(
+                    graph, carAccess, roadClass, roadClassLink,
+                    allHighwayMainlineEdges, endNodes.get(0), 3_000);
+            Set<Integer> nodesB = reachableNodesWithin(
+                    graph, carAccess, roadClass, roadClassLink,
+                    allHighwayMainlineEdges, endNodes.get(1), 3_000);
+            nodesA.retainAll(nodesB);
+            if (nodesA.size() >= 2) {
+                int marked = 0;
+                AllEdgesIterator all = graph.getAllEdges();
+                while (all.next()) {
+                    int edgeId = all.getEdge();
+                    if (allHighwayMainlineEdges.get(edgeId)) {
+                        continue;
+                    }
+                    if (!nodesA.contains(all.getBaseNode())
+                            || !nodesA.contains(all.getAdjNode())) {
+                        continue;
+                    }
+                    if (!all.get(carAccess) && !all.getReverse(carAccess)) {
+                        continue;
+                    }
+                    bypassEdges.set(edgeId);
+                    marked++;
+                }
+                LOGGER.info("道路分类 通州检查站绕行辅路 断点边数={} 辅路边数={}",
+                        noAccess.size(), marked);
+            }
+        }
+        return bypassEdges;
+    }
+
+    private static boolean hasDrivableMotorwayNeighbor(
+            BaseGraph graph,
+            BooleanEncodedValue carAccess,
+            EnumEncodedValue<RoadClass> roadClass,
+            BooleanEncodedValue roadClassLink,
+            int node,
+            Set<Integer> excludedEdges) {
+        EdgeExplorer explorer = graph.createEdgeExplorer();
+        EdgeIterator edge = explorer.setBaseNode(node);
+        while (edge.next()) {
+            int edgeId = edge.getEdge();
+            if (excludedEdges.contains(edgeId)) {
+                continue;
+            }
+            if (edge.get(roadClass) != RoadClass.MOTORWAY || edge.get(roadClassLink)) {
+                continue;
+            }
+            if (edge.get(carAccess) || edge.getReverse(carAccess)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Set<Integer> reachableNodesWithin(
+            BaseGraph graph,
+            BooleanEncodedValue carAccess,
+            EnumEncodedValue<RoadClass> roadClass,
+            BooleanEncodedValue roadClassLink,
+            BitSet allHighwayMainlineEdges,
+            int fromNode,
+            double maxDistanceMeters) {
+        Map<Integer, Double> distances = new HashMap<>();
+        distances.put(fromNode, 0.0);
+        ArrayDeque<Integer> queue = new ArrayDeque<>();
+        queue.add(fromNode);
+        EdgeExplorer explorer = graph.createEdgeExplorer();
+        while (!queue.isEmpty()) {
+            int node = queue.poll();
+            EdgeIterator edge = explorer.setBaseNode(node);
+            while (edge.next()) {
+                int edgeId = edge.getEdge();
+                if (allHighwayMainlineEdges.get(edgeId)
+                        || (!edge.get(carAccess) && !edge.getReverse(carAccess))) {
+                    continue;
+                }
+                int next = edge.getAdjNode() == node
+                        ? edge.getBaseNode() : edge.getAdjNode();
+                double candidate = distances.get(node) + edge.getDistance();
+                if (candidate > maxDistanceMeters) {
+                    continue;
+                }
+                if (distances.containsKey(next)
+                        && distances.get(next) <= candidate) {
+                    continue;
+                }
+                distances.put(next, candidate);
+                queue.add(next);
+            }
+        }
+        return distances.keySet();
     }
 
     private static void append(StringBuilder value, String label, BitSet edges) {

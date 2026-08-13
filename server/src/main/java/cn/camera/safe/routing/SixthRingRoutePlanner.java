@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.Completion.INTERRUPTED;
 import static cn.camera.safe.routing.EdgeKeyMultiTargetDijkstra.Completion.MAX_VISITED_STATES;
@@ -209,6 +210,11 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
         ReferenceOption selected;
         int tier = 1;
         do {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new SixthRingRouteException(
+                        SixthRingRouteException.Reason.SEARCH_TIMEOUT,
+                        "路线计算被中断");
+            }
             double toleranceMeters = (double) properties.portalDistanceTierMeters() * tier;
             search = EdgeKeyMultiTargetDijkstra.search(
                     queryGraph,
@@ -335,10 +341,18 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
             return List.of();
         }
         if (properties.parallelCandidateEvaluation() && candidates.size() > 1) {
+            AtomicBoolean cancelled = new AtomicBoolean(false);
             List<Future<ReferenceOption>> futures = new ArrayList<>(candidates.size());
-            for (EdgeKeyMultiTargetDijkstra.PortalPath insidePath : candidates) {
+            java.util.Queue<Integer> errored = new java.util.concurrent.ConcurrentLinkedQueue<>();
+            for (int index = 0; index < candidates.size(); index++) {
+                EdgeKeyMultiTargetDijkstra.PortalPath insidePath = candidates.get(index);
+                int candidateIndex = index;
                 futures.add(candidateEvaluator.submit(() -> {
                     try {
+                        if (cancelled.get()
+                                || Thread.currentThread().isInterrupted()) {
+                            return null;
+                        }
                         return referenceOption(
                                 direction,
                                 start,
@@ -354,9 +368,11 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
                                 referenceConstraint,
                                 releasesById,
                                 insidePath);
-                    } catch (RuntimeException exception) {
-                        LOGGER.warn("候选并行评估异常 通行口={} 异常={}",
-                                insidePath.portal().id(), exception.getMessage());
+                    } catch (Throwable exception) {
+                        LOGGER.warn("候选并行评估异常 通行口={} 异常={} 类型={}",
+                                insidePath.portal().id(), exception.getMessage(),
+                                exception.getClass().getSimpleName());
+                        errored.add(candidateIndex);
                         return null;
                     }
                 }));
@@ -368,14 +384,46 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
                     if (option != null) {
                         options.add(option);
                     }
+                } catch (InterruptedException exception) {
+                    cancelled.set(true);
+                    Thread.currentThread().interrupt();
+                    throw new SixthRingRouteException(
+                            SixthRingRouteException.Reason.SEARCH_TIMEOUT,
+                            "路线计算被中断");
                 } catch (Exception exception) {
                     throw new IllegalStateException("候选并行评估失败", exception);
+                }
+            }
+            for (Integer index : errored) {
+                EdgeKeyMultiTargetDijkstra.PortalPath insidePath = candidates.get(index);
+                ReferenceOption option = referenceOption(
+                        direction,
+                        start,
+                        end,
+                        snapshot,
+                        context,
+                        hopper,
+                        queryGraph,
+                        queryTimeWeighting,
+                        roadClass,
+                        roadClassLink,
+                        roadEnvironment,
+                        referenceConstraint,
+                        releasesById,
+                        insidePath);
+                if (option != null) {
+                    options.add(option);
                 }
             }
             return List.copyOf(options);
         }
         List<ReferenceOption> options = new ArrayList<>();
         for (EdgeKeyMultiTargetDijkstra.PortalPath insidePath : candidates) {
+            if (Thread.currentThread().isInterrupted()) {
+                throw new SixthRingRouteException(
+                        SixthRingRouteException.Reason.SEARCH_TIMEOUT,
+                        "路线计算被中断");
+            }
             ReferenceOption option = referenceOption(
                     direction,
                     start,

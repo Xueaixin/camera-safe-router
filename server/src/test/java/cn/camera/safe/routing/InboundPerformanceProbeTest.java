@@ -76,10 +76,15 @@ class InboundPerformanceProbeTest {
                     "OUTBOUND_ZXZ_LYY_SERIAL", serialPlanner, ZHUXINZHUANG, LONGYIYUAN, snapshot);
             PlannedRoute zhuxinzhuangParallel = plan(
                     "OUTBOUND_ZXZ_LYY_PARALLEL", parallelPlanner, ZHUXINZHUANG, LONGYIYUAN, snapshot);
+            PlannedRoute lyyZhuxinzhuangSerial = plan(
+                    "INBOUND_LYY_ZXZ_SERIAL", serialPlanner, LONGYIYUAN, ZHUXINZHUANG, snapshot);
+            PlannedRoute lyyZhuxinzhuangParallel = plan(
+                    "INBOUND_LYY_ZXZ_PARALLEL", parallelPlanner, LONGYIYUAN, ZHUXINZHUANG, snapshot);
 
             assertSameRoute(inboundSerial, inboundParallel, "INBOUND_LYY_HW");
             assertSameRoute(outboundSerial, outboundParallel, "OUTBOUND_HW_LYY");
             assertSameRoute(zhuxinzhuangSerial, zhuxinzhuangParallel, "OUTBOUND_ZXZ_LYY");
+            assertSameRoute(lyyZhuxinzhuangSerial, lyyZhuxinzhuangParallel, "INBOUND_LYY_ZXZ");
         } finally {
             graphManager.close();
         }

@@ -83,12 +83,16 @@ public final class RoadStateTraversalConstraint implements EdgeTraversalConstrai
         if (roadClassification.isAnyHighwayMainline(baseEdgeId)) {
             return true;
         }
+        if (roadClassification.isTongzhouCheckpointBypass(baseEdgeId)) {
+            return true;
+        }
         if (roadClassification.isMotorwayLink(baseEdgeId)) {
             if (roadClassification.isSixthInterior(baseEdgeId)) {
                 return roadClassification.isSixthExitConnectorEdgeKey(directedEdgeKey);
             }
             if (roadClassification.isTongzhouOutsideSixth(baseEdgeId)) {
-                return roadClassification.isTongzhouHighwayConnector(baseEdgeId);
+                return roadClassification.isTongzhouHighwayConnector(baseEdgeId)
+                        || roadClassification.isTongzhouCheckpointBypass(baseEdgeId);
             }
         }
         return spatialConstraint.allows(edge, fractionFromBase);

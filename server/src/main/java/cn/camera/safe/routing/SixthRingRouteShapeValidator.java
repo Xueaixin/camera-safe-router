@@ -136,6 +136,9 @@ public final class SixthRingRouteShapeValidator {
                 LineString segment = lineString(List.of(
                         geometry.get(index - 1), geometry.get(index)));
                 if (state == State.RELEASED) {
+                    if (roadClassification.isTongzhouCheckpointBypass(baseEdgeId)) {
+                        continue;
+                    }
                     if (restrictedInterior.intersects(segment)) {
                         return false;
                     }

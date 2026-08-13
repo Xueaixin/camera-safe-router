@@ -22,6 +22,7 @@ public final class RoadClassificationIndex {
     private final BitSet tongzhouHighwayConnectorEdges;
     private final BitSet rhtEntryEdgeKeys;
     private final BitSet rhtExitEdgeKeys;
+    private final BitSet tongzhouCheckpointBypassEdges;
     private final String fingerprint;
 
     /** Compatibility constructor for focused tests and legacy routing modes. */
@@ -44,6 +45,7 @@ public final class RoadClassificationIndex {
                 new BitSet(),
                 directedKeys(releasedConnectorEdges),
                 releasedConnectorEdges,
+                new BitSet(),
                 new BitSet(),
                 new BitSet(),
                 fingerprint);
@@ -76,6 +78,7 @@ public final class RoadClassificationIndex {
                 new BitSet(),
                 sixthExitConnectorEdgeKeys,
                 tongzhouHighwayConnectorEdges,
+                new BitSet(),
                 new BitSet(),
                 new BitSet(),
                 fingerprint);
@@ -112,6 +115,7 @@ public final class RoadClassificationIndex {
                 tongzhouHighwayConnectorEdges,
                 new BitSet(),
                 new BitSet(),
+                new BitSet(),
                 fingerprint);
     }
 
@@ -131,6 +135,7 @@ public final class RoadClassificationIndex {
             BitSet tongzhouHighwayConnectorEdges,
             BitSet rhtEntryEdgeKeys,
             BitSet rhtExitEdgeKeys,
+            BitSet tongzhouCheckpointBypassEdges,
             String fingerprint) {
         this.cameraExemptMainlineEdges = copy(
                 cameraExemptMainlineEdges, "cameraExemptMainlineEdges");
@@ -155,6 +160,8 @@ public final class RoadClassificationIndex {
                 tongzhouHighwayConnectorEdges, "tongzhouHighwayConnectorEdges");
         this.rhtEntryEdgeKeys = copy(rhtEntryEdgeKeys, "rhtEntryEdgeKeys");
         this.rhtExitEdgeKeys = copy(rhtExitEdgeKeys, "rhtExitEdgeKeys");
+        this.tongzhouCheckpointBypassEdges = copy(
+                tongzhouCheckpointBypassEdges, "tongzhouCheckpointBypassEdges");
         if (fingerprint == null || fingerprint.isBlank()) {
             throw new IllegalArgumentException("road classification fingerprint is required");
         }
@@ -166,6 +173,7 @@ public final class RoadClassificationIndex {
         return new RoadClassificationIndex(
                 empty, empty, empty, empty, empty, empty,
                 empty, empty, empty, empty, empty, empty, empty, empty, empty,
+                empty,
                 "empty:" + graphFingerprint);
     }
 
@@ -225,6 +233,11 @@ public final class RoadClassificationIndex {
 
     public boolean isTongzhouHighwayConnector(int baseEdgeId) {
         return contains(tongzhouHighwayConnectorEdges, baseEdgeId);
+    }
+
+    /** 通州境内高速检查站（主路 access=no）的平行绕行辅路，released 阶段允许通行。 */
+    public boolean isTongzhouCheckpointBypass(int baseEdgeId) {
+        return contains(tongzhouCheckpointBypassEdges, baseEdgeId);
     }
 
     /** Directed link-chain keys of verified {@code H-T -> R} interchange corridors. */
