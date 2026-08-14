@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 
 import { getApiClient } from '@/services/createApiClient';
 import { ApiClientError } from '@/services/errors';
-import { fetchOsrmRoutes } from '@/services/osrmClient';
+import { fetchAmapDrivingRoutes } from '@/maps/amapDriving';
 import { ProtocolError } from '@/services/protocol';
 import type { ApiClient } from '@/services/apiClient';
 import type { RouteRequest, RouteResponse } from '@/types/api';
@@ -161,6 +161,12 @@ export const useRouteStore = defineStore('route', () => {
     externalRouteError.value = '';
     let from: { lng: number; lat: number } | null = null;
     let to: { lng: number; lat: number } | null = null;
+    if (route.planningMode === 'EXTERNAL_ONLY') {
+      // 场景 1：起终点均在受控区外，只走 /routes 轻量响应 + 高德导航入口，
+      // 不调用高德路线规划（不消耗 JS API 配额）。
+      externalRouteState.value = 'idle';
+      return;
+    }
     if (route.planningMode === 'CROSS_BOUNDARY_OUTBOUND' && route.navigationHandoff && end.value) {
       from = route.navigationHandoff.wgs84;
       to = wgs84ForPlace(end.value);
@@ -171,29 +177,21 @@ export const useRouteStore = defineStore('route', () => {
     ) {
       from = wgs84ForPlace(start.value);
       to = route.navigationHandoff.wgs84;
-    } else if (route.planningMode === 'EXTERNAL_ONLY' && start.value && end.value) {
-      from = wgs84ForPlace(start.value);
-      to = wgs84ForPlace(end.value);
     }
     if (!from || !to) {
       externalRouteState.value = 'idle';
       return;
     }
     try {
-      const osrmRoutes = await fetchOsrmRoutes(from, to, controller.signal);
+      const externalRoutesResult = await fetchAmapDrivingRoutes(from, to, controller.signal);
       if (controller.signal.aborted) return;
-      externalRoutes.value = osrmRoutes.slice(0, 3).map((osrmRoute, index) => ({
-        id: `osrm-${route.routeId}-${index}`,
-        distanceMeters: osrmRoute.distanceMeters,
-        durationSeconds: osrmRoute.durationSeconds,
-        geometry: osrmRoute.geometry,
-      }));
+      externalRoutes.value = externalRoutesResult;
       selectedExternalRoute.value = 0;
       externalRouteState.value = 'idle';
     } catch (caught: unknown) {
       if (controller.signal.aborted) return;
       externalRouteState.value = 'error';
-      externalRouteError.value = caught instanceof Error ? caught.message : 'OSRM 请求失败';
+      externalRouteError.value = caught instanceof Error ? caught.message : '高德路线规划失败';
     }
   }
 

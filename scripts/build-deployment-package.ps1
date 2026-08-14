@@ -1,8 +1,8 @@
 ﻿[CmdletBinding()]
 param(
-    # 中国 PBF（提供则先调用 prepare-jingjinji-osm.ps1 切分）。
+    # 中国 PBF（历史京津冀流程使用；正式北京方案请直接传 -Pbf）。
     [string]$ChinaPbf,
-    # 已切分的京津冀 PBF（与 ChinaPbf 二选一，优先于切分）。
+    # 北京 PBF（正式方案直接传 beijing-latest.osm.pbf）。
     [string]$Pbf,
     # 初版 camera.json（必填，打包进 data.zip）。
     [string]$CameraJson,
@@ -76,7 +76,7 @@ if (-not [string]::IsNullOrWhiteSpace($Pbf)) {
 } else {
     throw 'Provide either -ChinaPbf or -Pbf'
 }
-$stagingPbf = Join-Path $stagingRoot 'osm\jingjinji-latest.osm.pbf'
+$stagingPbf = Join-Path $stagingRoot 'osm\beijing-latest.osm.pbf'
 New-Item -ItemType Directory -Path (Split-Path -Parent $stagingPbf) -Force | Out-Null
 Copy-Item -LiteralPath $resolvedPbf -Destination $stagingPbf -Force
 Write-Host "Pbf -> $stagingPbf"
@@ -114,7 +114,7 @@ if ($LASTEXITCODE -ne 0) { throw 'osmium export tongzhou failed' }
 if ($LASTEXITCODE -ne 0) { throw 'boundary generation failed' }
 
 # ---- 4. 图缓存冷构图 ----
-$stagingCache = Join-Path $stagingRoot 'graph-cache\jingjinji-compliant-time-v2'
+$stagingCache = Join-Path $stagingRoot 'graph-cache\beijing-compliant-time-v2'
 & $javaExecutable -jar $jarPath graph-build --pbf $stagingPbf --cache-out $stagingCache
 if ($LASTEXITCODE -ne 0) { throw 'graph-build failed' }
 

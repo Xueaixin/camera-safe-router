@@ -23,6 +23,7 @@ import cn.camera.safe.routing.ExternalHandoffPoint;
 import cn.camera.safe.routing.NavigationHandoffPoint;
 import cn.camera.safe.routing.PlannedRoute;
 import cn.camera.safe.routing.RouteLeg;
+import cn.camera.safe.routing.RoutePlanningMode;
 import cn.camera.safe.routing.RoutePlanner;
 import cn.camera.safe.routing.RoutingEngineException;
 import cn.camera.safe.routing.RoutingSnapshot;
@@ -100,12 +101,14 @@ public final class RoutePlanningService {
         }
 
         PlannedRoute plannedRoute = calculate(start, end, snapshot);
-        SafetyValidationResult safety = safetyValidator.validate(plannedRoute, snapshot);
-        if (!safety.compliant()) {
-            throw new BusinessException(HttpStatus.CONFLICT,
-                    ErrorCode.ROUTE_CONFLICT_DETECTED,
-                    "路线独立安全校验检测到摄像头冲突",
-                    Map.of("cameraConflictCount", safety.conflictCount()));
+        if (plannedRoute.planningMode() != RoutePlanningMode.EXTERNAL_ONLY) {
+            SafetyValidationResult safety = safetyValidator.validate(plannedRoute, snapshot);
+            if (!safety.compliant()) {
+                throw new BusinessException(HttpStatus.CONFLICT,
+                        ErrorCode.ROUTE_CONFLICT_DETECTED,
+                        "路线独立安全校验检测到摄像头冲突",
+                        Map.of("cameraConflictCount", safety.conflictCount()));
+            }
         }
 
         String routeId = UUID.randomUUID().toString();

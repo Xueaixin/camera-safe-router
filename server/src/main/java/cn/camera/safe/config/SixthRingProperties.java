@@ -16,7 +16,6 @@ public record SixthRingProperties(
         boolean requireApprovedBoundary,
         @DecimalMin("0.0") double cameraOutsideMarginMeters,
         @Min(1) int portalDistanceTierMeters,
-        @DecimalMin("0.0") double maxSnapDistanceMeters,
         @DecimalMin("0.0") double maxJoinGapMeters,
         @Min(1) int maxVisitedStates,
         @NotNull Duration searchTimeout,

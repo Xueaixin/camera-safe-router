@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildMockCrossBoundaryRoute,
+  buildMockExternalOnlyRoute,
   buildMockRoute,
   mockApiError,
   MOCK_CONTROLLED_AREA,
 } from '@/mocks/fixtures';
 import type { ApiClient } from '@/services/apiClient';
 import { ApiClientError } from '@/services/errors';
+import { fetchAmapDrivingRoutes } from '@/maps/amapDriving';
 import { useRouteStore } from '@/stores/routeStore';
 import type {
   BoundingBox,
@@ -20,6 +22,12 @@ import type {
   RouteResponse,
 } from '@/types/api';
 import type { BrowserLocation, CoordinateSystem, SelectedPlace } from '@/types/coordinate';
+
+vi.mock('@/maps/amapDriving', () => ({
+  fetchAmapDrivingRoutes: vi.fn(),
+}));
+
+const drivingMock = vi.mocked(fetchAmapDrivingRoutes);
 
 function place(name: string, lng: number, lat: number): SelectedPlace {
   return {
@@ -180,124 +188,88 @@ describe('route store', () => {
 
   it('switches a cross-boundary route between the full trip and safe segment', async () => {
     const store = useRouteStore();
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({
-          code: 'Ok',
-          routes: [
-            {
-              distanceMeters: 100_000,
-              durationSeconds: 3600,
-              geometry: [
-                [117.0, 39.3],
-                [117.1, 39.2],
-              ],
-            },
-          ],
-        }),
-      })),
-    );
+    drivingMock.mockResolvedValue([
+      {
+        id: 'amap-0',
+        distanceMeters: 100_000,
+        durationSeconds: 3600,
+        geometry: [
+          { lng: 117.0, lat: 39.3 },
+          { lng: 117.1, lat: 39.2 },
+        ],
+      },
+    ]);
     store.setStart(place('环内起点', 116.397, 39.908));
     store.setEnd(place('环外终点', 117.21, 39.136));
-    try {
-      await store.plan(clientWith(async (request) => buildMockCrossBoundaryRoute(request)));
-      await vi.waitFor(() => {
-        expect(store.externalRoutes).toHaveLength(1);
-      });
+    await store.plan(clientWith(async (request) => buildMockCrossBoundaryRoute(request)));
+    await vi.waitFor(() => {
+      expect(store.externalRoutes).toHaveLength(1);
+    });
 
-      expect(store.routeView).toBe('full');
-      expect(store.displayGeometry).toHaveLength(4);
-      expect(store.displayDistanceMeters).toBe(129200);
+    expect(store.routeView).toBe('full');
+    expect(store.displayGeometry).toHaveLength(4);
+    expect(store.displayDistanceMeters).toBe(129200);
 
-      store.showSafeSegment();
-      expect(store.routeView).toBe('safe-segment');
-      expect(store.displayGeometry).toHaveLength(4);
-      expect(store.displayDistanceMeters).toBe(29200);
+    store.showSafeSegment();
+    expect(store.routeView).toBe('safe-segment');
+    expect(store.displayGeometry).toHaveLength(4);
+    expect(store.displayDistanceMeters).toBe(29200);
 
-      store.showFullRoute();
-      expect(store.routeView).toBe('full');
-      store.setEnd(place('新终点', 116.47, 39.992));
-      expect(store.routeView).toBe('full');
-      expect(store.route).toBeNull();
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    store.showFullRoute();
+    expect(store.routeView).toBe('full');
+    store.setEnd(place('新终点', 116.47, 39.992));
+    expect(store.routeView).toBe('full');
+    expect(store.route).toBeNull();
   });
 
   it('loads OSRM external routes after a cross-boundary route succeeds', async () => {
     const store = useRouteStore();
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        code: 'Ok',
-        routes: [
-          {
-            distanceMeters: 100_000,
-            durationSeconds: 3600,
-            geometry: [
-              [117.0, 39.3],
-              [117.1, 39.2],
-            ],
-          },
-          {
-            distanceMeters: 110_000,
-            durationSeconds: 3900,
-            geometry: [
-              [117.0, 39.3],
-              [117.2, 39.1],
-            ],
-          },
+    drivingMock.mockResolvedValue([
+      {
+        id: 'amap-0',
+        distanceMeters: 100_000,
+        durationSeconds: 3600,
+        geometry: [
+          { lng: 117.0, lat: 39.3 },
+          { lng: 117.1, lat: 39.2 },
         ],
-      }),
-    }));
-    vi.stubGlobal('fetch', fetchMock);
-    try {
-      store.setStart(place('环内起点', 116.397, 39.908));
-      store.setEnd(place('环外终点', 117.21, 39.136));
-      await store.plan(clientWith(async (request) => buildMockCrossBoundaryRoute(request)));
-      await vi.waitFor(() => {
-        expect(store.externalRoutes).toHaveLength(2);
-      });
-      expect(store.selectedExternalRoute).toBe(0);
-      expect(store.externalRouteState).toBe('idle');
-      expect(store.displayDistanceMeters).toBe(129200);
-      store.selectExternalRoute(1);
-      expect(store.selectedExternalRoute).toBe(1);
-      expect(store.displayDistanceMeters).toBe(139200);
-      expect(fetchMock).toHaveBeenCalledOnce();
-    } finally {
-      vi.unstubAllGlobals();
-    }
+      },
+      {
+        id: 'amap-1',
+        distanceMeters: 110_000,
+        durationSeconds: 3900,
+        geometry: [
+          { lng: 117.0, lat: 39.3 },
+          { lng: 117.2, lat: 39.1 },
+        ],
+      },
+    ]);
+    store.setStart(place('环内起点', 116.397, 39.908));
+    store.setEnd(place('环外终点', 117.21, 39.136));
+    await store.plan(clientWith(async (request) => buildMockCrossBoundaryRoute(request)));
+    await vi.waitFor(() => {
+      expect(store.externalRoutes).toHaveLength(2);
+    });
+    expect(store.selectedExternalRoute).toBe(0);
+    expect(store.externalRouteState).toBe('idle');
+    expect(store.displayDistanceMeters).toBe(129200);
+    store.selectExternalRoute(1);
+    expect(store.selectedExternalRoute).toBe(1);
+    expect(store.displayDistanceMeters).toBe(139200);
+    expect(drivingMock).toHaveBeenCalledOnce();
   });
 
-  it('keeps at most three external route alternatives', async () => {
+  it('keeps an external-only route local without calling AMap', async () => {
     const store = useRouteStore();
-    const fourRoutes = Array.from({ length: 4 }, (_, index) => ({
-      distanceMeters: 100_000 + index,
-      durationSeconds: 3600 + index,
-      geometry: [
-        [116.5, 39.9],
-        [116.6, 39.8],
-      ],
-    }));
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ code: 'Ok', routes: fourRoutes }),
-      })),
-    );
-    try {
-      store.setStart(place('环内起点', 116.397, 39.908));
-      store.setEnd(place('环外终点', 117.21, 39.136));
-      await store.plan(clientWith(async (request) => buildMockCrossBoundaryRoute(request)));
-      await vi.waitFor(() => {
-        expect(store.externalRoutes).toHaveLength(3);
-      });
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    store.setStart(place('界外起点', 116.13, 40.075));
+    store.setEnd(place('界外终点', 117.07, 39.31));
+    await store.plan(clientWith(async (request) => buildMockExternalOnlyRoute(request)));
+
+    expect(store.route?.planningMode).toBe('EXTERNAL_ONLY');
+    expect(store.externalRoutes).toHaveLength(0);
+    expect(store.externalRouteState).toBe('idle');
+    expect(drivingMock).not.toHaveBeenCalled();
+    expect(store.displayDistanceMeters).toBe(128_000);
+    expect(store.displayGeometry).toHaveLength(4);
   });
 });

@@ -43,7 +43,7 @@ $controlledAreaDir = Join-Path $workspaceRoot 'work\controlled-area-v1'
 
 $sixthRingLines = Resolve-DefaultPath $SixthRingLines (Join-Path $workspaceRoot 'work\sixth-ring\sixth-ring-lines.geojson')
 $tongzhouInput = Resolve-DefaultPath $TongzhouGeojson (Join-Path $controlledAreaDir 'tongzhou-boundary.geojson')
-$pbfInput = Resolve-DefaultPath $Pbf (Join-Path $resolvedDataRoot 'osm\jingjinji-latest.osm.pbf')
+$pbfInput = Resolve-DefaultPath $Pbf (Join-Path $resolvedDataRoot 'osm\beijing-latest.osm.pbf')
 $outputPath = Resolve-DefaultPath $Output (Join-Path $controlledAreaDir 'controlled-area-boundary-candidate.geojson')
 $reportPath = Resolve-DefaultPath $Report (Join-Path $controlledAreaDir 'controlled-area-boundary-report.md')
 $jarPath = Resolve-DefaultPath $Jar (Join-Path $resolvedCodeRoot 'server\target\camera-safe-routing-server-0.1.0-SNAPSHOT.jar')

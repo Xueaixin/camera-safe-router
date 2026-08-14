@@ -723,6 +723,12 @@ a:focus-visible {
   border-left-color: var(--color-error);
 }
 
+.feedback--warning {
+  color: #77510c;
+  background: #fff8e8;
+  border-left-color: #cc8414;
+}
+
 .feedback--retained {
   color: #7c5206;
   background: #fff8e8;

@@ -44,7 +44,6 @@ class BeijingRoutePlannerHandoffPocTest {
                 50,
                 1000,
                 100,
-                100,
                 2_000_000,
                 Duration.ofSeconds(8),
                 false,
@@ -110,15 +109,16 @@ class BeijingRoutePlannerHandoffPocTest {
                     "龙意园→华为");
 
             PlannedRoute externalOnly = planner.plan(
-                    new Wgs84Coordinate(116.8170, 39.9490),
-                    LONGYIYUAN_WUQING,
+                    new Wgs84Coordinate(115.97, 40.46),
+                    new Wgs84Coordinate(116.85, 40.37),
                     snapshot);
             assertThat(externalOnly.planningMode())
                     .isEqualTo(RoutePlanningMode.EXTERNAL_ONLY);
             assertThat(externalOnly.safeSegment()).isNull();
             assertThat(externalOnly.referenceSegment()).isNull();
             assertThat(externalOnly.navigationHandoff()).isNull();
-            assertThat(externalOnly.geometry().size()).isEqualTo(2);
+            assertThat(externalOnly.geometry().size()).isGreaterThanOrEqualTo(2);
+            assertThat(externalOnly.distanceMeters()).isGreaterThan(0);
         } finally {
             graphManager.close();
         }

@@ -15,11 +15,11 @@ class RuntimePathConfigurationTest {
         MockEnvironment environment = applicationEnvironment();
 
         assertThat(environment.getRequiredProperty("app.routing.pbf-path"))
-                .isEqualTo("/camera-safe-routing-data/osm/jingjinji-latest.osm.pbf");
+                .isEqualTo("/camera-safe-routing-data/osm/beijing-latest.osm.pbf");
         assertThat(environment.getRequiredProperty("app.routing.graph-cache-path"))
-                .isEqualTo("/camera-safe-routing-data/graph-cache/jingjinji");
+                .isEqualTo("/camera-safe-routing-data/graph-cache/beijing");
         assertThat(environment.getRequiredProperty("app.routing.candidate-graph-cache-path"))
-                .isEqualTo("/camera-safe-routing-data/graph-cache/jingjinji-compliant-time-v2");
+                .isEqualTo("/camera-safe-routing-data/graph-cache/beijing-compliant-time-v2");
         assertThat(environment.getRequiredProperty("app.routing.profile-mode"))
                 .isEqualTo("COMPLIANT_TIME_V2");
         assertThat(environment.getRequiredProperty("app.sixth-ring.boundary-path"))
@@ -52,11 +52,11 @@ class RuntimePathConfigurationTest {
                 .withProperty("ROUTING_DATA_ROOT", "R:/routing-data");
 
         assertThat(environment.getRequiredProperty("app.routing.pbf-path"))
-                .isEqualTo("R:/routing-data/osm/jingjinji-latest.osm.pbf");
+                .isEqualTo("R:/routing-data/osm/beijing-latest.osm.pbf");
         assertThat(environment.getRequiredProperty("app.routing.graph-cache-path"))
-                .isEqualTo("R:/routing-data/graph-cache/jingjinji");
+                .isEqualTo("R:/routing-data/graph-cache/beijing");
         assertThat(environment.getRequiredProperty("app.routing.candidate-graph-cache-path"))
-                .isEqualTo("R:/routing-data/graph-cache/jingjinji-compliant-time-v2");
+                .isEqualTo("R:/routing-data/graph-cache/beijing-compliant-time-v2");
         assertThat(environment.getRequiredProperty("app.sixth-ring.boundary-path"))
                 .isEqualTo("R:/routing-data/boundaries/sixth-ring-boundary.geojson");
         assertThat(environment.getRequiredProperty("app.cameras.json-path"))

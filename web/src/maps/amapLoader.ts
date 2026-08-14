@@ -43,7 +43,7 @@ export function loadAmap(key: string, securityCode: string): Promise<AmapNamespa
     if (!existing) {
       script.id = SCRIPT_ID;
       script.async = true;
-      script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.AutoComplete,AMap.Geocoder`;
+      script.src = `https://webapi.amap.com/maps?v=2.0&key=${encodeURIComponent(key)}&plugin=AMap.AutoComplete,AMap.Geocoder,AMap.Driving`;
       document.head.appendChild(script);
     }
   });

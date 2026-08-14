@@ -80,6 +80,36 @@ export interface AmapGeocoder {
   getAddress(position: [number, number], callback: (status: string, result: unknown) => void): void;
 }
 
+export interface AmapDrivingStep {
+  path?: AmapLngLat[];
+}
+
+export interface AmapDrivingRoute {
+  distance: number;
+  time: number;
+  steps: AmapDrivingStep[];
+}
+
+export interface AmapDrivingResult {
+  routes: AmapDrivingRoute[];
+}
+
+export interface AmapDriving {
+  search(
+    origin: [number, number],
+    destination: [number, number],
+    callback: (status: string, result: AmapDrivingResult) => void,
+  ): void;
+}
+
+export interface AmapDrivingPolicy {
+  LEAST_TIME: number;
+  LEAST_FEE: number;
+  LEAST_DISTANCE: number;
+  REAL_TRAFFIC: number;
+  MULTI_POLICIES: number;
+}
+
 export interface AmapNamespace {
   Map: new (container: HTMLElement, options: Record<string, unknown>) => AmapMap;
   Marker: new (options: Record<string, unknown>) => AmapMarker;
@@ -90,6 +120,8 @@ export interface AmapNamespace {
   InfoWindow: new (options: Record<string, unknown>) => AmapInfoWindow;
   AutoComplete: new (options?: Record<string, unknown>) => AmapAutoComplete;
   Geocoder: new (options?: Record<string, unknown>) => AmapGeocoder;
+  Driving: new (options?: Record<string, unknown>) => AmapDriving;
+  DrivingPolicy: AmapDrivingPolicy;
   convertFrom(
     position: [number, number],
     source: 'gps',

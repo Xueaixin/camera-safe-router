@@ -93,6 +93,11 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
                     snapshot);
         }
         if (startLocation == OUTSIDE && endLocation == OUTSIDE) {
+            if (!graphManager.contains(start) || !graphManager.contains(end)) {
+                throw new SixthRingRouteException(
+                        SixthRingRouteException.Reason.POINT_NOT_FOUND,
+                        "起点或终点超出当前路网覆盖范围");
+            }
             return standardRoute(
                     RoutePlanningMode.EXTERNAL_ONLY,
                     context.boundary().version(),
@@ -114,33 +119,17 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
             Wgs84Coordinate start,
             Wgs84Coordinate end,
             RoutingSnapshot snapshot) {
-        if (mode == RoutePlanningMode.EXTERNAL_ONLY) {
-            return new PlannedRoute(
-                    mode,
-                    boundaryVersion,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    0,
-                    0,
-                    List.of(start, end),
-                    0,
-                    0,
-                    0);
-        }
         EngineRoute route = routingEngine.route(start, end, snapshot);
         RouteLeg leg = new RouteLeg(
                 route.distanceMeters(), route.durationMillis(), route.geometry());
+        RouteLeg safeSegment = mode == RoutePlanningMode.EXTERNAL_ONLY ? null : leg;
         return new PlannedRoute(
                 mode,
                 boundaryVersion,
                 null,
                 null,
                 null,
-                leg,
+                safeSegment,
                 null,
                 null,
                 route.distanceMeters(),
@@ -172,7 +161,7 @@ public final class SixthRingRoutePlanner implements RoutePlanner {
         EdgeFilter snapFilter = edge -> edge.get(carAccess) || edge.getReverse(carAccess);
         Snap snap = hopper.getLocationIndex().findClosest(
                 insidePoint.lat(), insidePoint.lng(), snapFilter);
-        if (!snap.isValid() || snap.getQueryDistance() > properties.maxSnapDistanceMeters()) {
+        if (!snap.isValid()) {
             throw new SixthRingRouteException(
                     SixthRingRouteException.Reason.POINT_NOT_FOUND,
                     "六环内点无法可靠吸附到当前驾车路网");

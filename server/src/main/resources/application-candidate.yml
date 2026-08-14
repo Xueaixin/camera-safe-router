@@ -8,7 +8,7 @@
 # 正式数据不需要本 profile：直接使用 application.yml 的默认数据根目录。
 app:
   routing:
-    graph-cache-path: ../../workspace/work/graph-cache-candidates/jingjinji-compliant-time-v2-20260807-current
-    candidate-graph-cache-path: ../../workspace/work/graph-cache-candidates/jingjinji-compliant-time-v2-20260807
+    graph-cache-path: ../../workspace/work/graph-cache-candidates/beijing-compliant-time-v2
+    candidate-graph-cache-path: ../../workspace/work/graph-cache-candidates/beijing-compliant-time-v2
   sixth-ring:
-    boundary-path: ../../workspace/work/controlled-area-v1/controlled-area-boundary-candidate.geojson
+    boundary-path: ../../workspace/work/beijing-validation/controlled-area-boundary-beijing.geojson

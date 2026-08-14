@@ -137,7 +137,6 @@ class InboundPerformanceProbeTest {
                 50,
                 1000,
                 100,
-                100,
                 2_000_000,
                 Duration.ofSeconds(5),
                 parallel,

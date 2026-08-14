@@ -54,7 +54,6 @@ class SixthRingDirectionalRouteRegressionPocTest {
             "/fixtures/sixth-ring-directional-route-regression.json";
     private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
     private static final double PORTAL_TOLERANCE_METERS = 1_000;
-    private static final double MAX_SNAP_DISTANCE_METERS = 100;
     private static final double MAX_JOIN_GAP_METERS = 100;
 
     @Test
@@ -202,10 +201,6 @@ class SixthRingDirectionalRouteRegressionPocTest {
                 snap.getSnappedPoint().lon,
                 snap.getSnappedPoint().lat,
                 snap.getQueryDistance());
-        assertThat(snap.getQueryDistance())
-                .as(fixture.id() + " inside snap distance")
-                .isLessThanOrEqualTo(MAX_SNAP_DISTANCE_METERS);
-
         List<Candidate> directionalCandidates = fixture.direction() == BoundaryDirection.OUTBOUND
                 ? candidates.outbound() : candidates.inbound();
         SearchMeasurement search = search(

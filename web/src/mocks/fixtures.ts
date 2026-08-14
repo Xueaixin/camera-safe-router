@@ -247,6 +247,18 @@ export function buildMockExternalOnlyRoute(
       : { lng: coordinate.lng, lat: coordinate.lat };
   const start = displayCoordinate(request.start);
   const end = displayCoordinate(request.end);
+  const geometry = [
+    { lng: start.lng, lat: start.lat },
+    {
+      lng: start.lng + (end.lng - start.lng) * 0.32,
+      lat: start.lat + (end.lat - start.lat) * 0.25,
+    },
+    {
+      lng: start.lng + (end.lng - start.lng) * 0.67,
+      lat: start.lat + (end.lat - start.lat) * 0.72,
+    },
+    { lng: end.lng, lat: end.lat },
+  ];
   return {
     routeId,
     coordinateSystem: 'GCJ02',
@@ -258,12 +270,12 @@ export function buildMockExternalOnlyRoute(
     externalHandoff: null,
     safeSegment: null,
     referenceSegment: null,
-    distanceMeters: 0,
-    durationSeconds: 0,
+    distanceMeters: 128_000,
+    durationSeconds: 7200,
     cameraConflictCount: 0,
     cameraSnapshotVersion: 'fixture-camera-v1',
     blockedEdgeVersion: 'fixture-blocked-v1',
-    geometry: [start, end],
+    geometry,
     steps: [],
   };
 }

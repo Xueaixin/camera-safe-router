@@ -113,6 +113,46 @@ test('no compliant route is explicit and no route is drawn', async ({ page }) =>
   await expect(page.getByTestId('map-container')).toHaveAttribute('data-route-points', '0');
 });
 
+test('external-only route uses the /routes response without external alternatives', async ({
+  page,
+}) => {
+  await page.goto('/?mockScenario=external-only&mockDelay=0');
+  await expandSearchPanel(page);
+  await page.getByRole('combobox', { name: '搜索起点' }).fill('石家庄');
+  await page.getByRole('option', { name: /石家庄站/ }).click();
+  await page.getByRole('combobox', { name: '搜索终点' }).fill('天津');
+  await page.getByRole('option', { name: /天津站/ }).click();
+  await page.getByTestId('plan-route').click();
+
+  const map = page.getByTestId('map-container');
+  await expect(map).toHaveAttribute('data-route-points', '4');
+  await expect(map).toHaveAttribute('data-external-route-count', '0');
+  await expect(page.getByTestId('route-summary')).toContainText('公里');
+  await expect(page.getByTestId('route-summary')).toContainText('仅供参考');
+  await expect(page.getByTestId('external-route-summary')).toBeHidden();
+  await expect(page.getByTestId('external-only-navigation')).toBeVisible();
+});
+
+test('external-only out-of-network error offers AMap navigation with a warning style', async ({
+  page,
+}) => {
+  await page.goto('/?mockScenario=outside-bounds&mockDelay=0');
+  await expandSearchPanel(page);
+  await page.getByRole('combobox', { name: '搜索起点' }).fill('石家庄');
+  await page.getByRole('option', { name: /石家庄站/ }).click();
+  await page.getByRole('combobox', { name: '搜索终点' }).fill('天津');
+  await page.getByRole('option', { name: /天津站/ }).click();
+  await page.getByTestId('plan-route').click();
+
+  const error = page.getByTestId('route-error');
+  await expect(error).toContainText('超出可规划范围');
+  await expect(error).toContainText('或使用高德进行路线规划');
+  await expect(error).toHaveClass(/feedback--warning/);
+  const navigationLink = page.getByTestId('outside-bounds-navigation');
+  await expect(navigationLink).toBeVisible();
+  await expect(navigationLink).toHaveAttribute('href', /uri\.amap\.com\/navigation/);
+});
+
 test('allowed geolocation renders a display location and centers only on command', async ({
   page,
   context,

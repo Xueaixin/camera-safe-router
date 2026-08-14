@@ -15,14 +15,17 @@ import {
 import RouteSteps from './RouteSteps.vue';
 import { LOCATION_POLICY } from '@/config/locationPolicy';
 import { useLocationStore } from '@/stores/locationStore';
+import { useMapStore } from '@/stores/mapStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { buildAmapPointNavigationUri } from '@/maps/amapUri';
 import type { SelectedPlace } from '@/types/coordinate';
+import { isPointInsideControlledArea } from '@/utils/controlledArea';
 import { formatDistance, formatDuration, formatSnapshotVersion } from '@/utils/format';
 import { wgs84ToGcj02 } from '@/utils/wgs84ToGcj02';
 
 const routeStore = useRouteStore();
 const locationStore = useLocationStore();
+const mapStore = useMapStore();
 const expanded = ref(false);
 const showSteps = ref(false);
 
@@ -79,9 +82,7 @@ function gcj02ForPlace(place: SelectedPlace | null): { lng: number; lat: number 
     : wgs84ToGcj02(coordinate.lng, coordinate.lat);
 }
 
-function externalNavigationUri(): string | null {
-  const route = routeStore.route;
-  if (!route || route.planningMode !== 'EXTERNAL_ONLY') return null;
+function navigationUriFromEndpoints(): string | null {
   const from = gcj02ForPlace(routeStore.start);
   const to = gcj02ForPlace(routeStore.end);
   if (!from || !to) return null;
@@ -93,11 +94,31 @@ function externalNavigationUri(): string | null {
   );
 }
 
+function externalNavigationUri(): string | null {
+  const route = routeStore.route;
+  if (!route || route.planningMode !== 'EXTERNAL_ONLY') return null;
+  return navigationUriFromEndpoints();
+}
+
 const externalNavigationUrl = computed(() => externalNavigationUri());
+
+const outsideBoundsInScenarioOne = computed(() => {
+  if (routeStore.error?.state !== 'outside-bounds') return false;
+  if (!routeStore.start || !routeStore.end) return false;
+  const area = mapStore.controlledArea;
+  if (!area) return true;
+  const start = gcj02ForPlace(routeStore.start);
+  const end = gcj02ForPlace(routeStore.end);
+  if (!start || !end) return false;
+  return !isPointInsideControlledArea(start, area) && !isPointInsideControlledArea(end, area);
+});
+
+const outsideBoundsNavigationUrl = computed(() =>
+  outsideBoundsInScenarioOne.value ? navigationUriFromEndpoints() : null,
+);
 
 const externalPending = computed(
   () =>
-    routeStore.isCrossBoundary &&
     routeStore.routeView === 'full' &&
     routeStore.externalRouteState === 'loading' &&
     routeStore.externalRoutes.length === 0,
@@ -138,7 +159,7 @@ const displayDistanceText = computed(() =>
             <MapPinned :size="17" aria-hidden="true" />
             <span>{{ displayDistanceText }}</span>
           </div>
-          <div class="route-metrics__safe">
+          <div v-if="routeStore.route.planningMode !== 'EXTERNAL_ONLY'" class="route-metrics__safe">
             <ShieldCheck :size="17" aria-hidden="true" />
             <span>冲突 0</span>
           </div>
@@ -182,8 +203,11 @@ const displayDistanceText = computed(() =>
     <div class="route-sheet__body">
       <div
         v-if="routeStore.error"
-        class="feedback feedback--error"
-        :class="{ 'feedback--retained': routeStore.route }"
+        class="feedback"
+        :class="[
+          outsideBoundsInScenarioOne ? 'feedback--warning' : 'feedback--error',
+          { 'feedback--retained': routeStore.route },
+        ]"
         role="alert"
         data-testid="route-error"
       >
@@ -203,20 +227,43 @@ const displayDistanceText = computed(() =>
           重试
         </button>
       </div>
+      <a
+        v-if="outsideBoundsNavigationUrl"
+        class="button button--secondary button--compact route-external__navigate"
+        :href="outsideBoundsNavigationUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid="outside-bounds-navigation"
+      >
+        高德导航
+      </a>
 
       <div v-if="routeStore.route" class="route-details">
         <div class="route-status">
           <CheckCircle2 :size="18" aria-hidden="true" />
           <span>
-            <strong>路线已通过安全校验</strong>
-            <small>
+            <strong>
+              {{
+                routeStore.route.planningMode === 'EXTERNAL_ONLY'
+                  ? '界外路线规划完成'
+                  : '路线已通过安全校验'
+              }}
+            </strong>
+            <small v-if="routeStore.route.planningMode === 'EXTERNAL_ONLY'">
+              界外路线由服务端路网规划，仅供参考；实际导航请以高德导航为准。
+            </small>
+            <small v-else>
               点位快照 {{ formatSnapshotVersion(routeStore.route.cameraSnapshotVersion) }}
             </small>
           </span>
         </div>
 
         <div
-          v-if="routeStore.externalRoutes.length > 0 && routeStore.routeView === 'full'"
+          v-if="
+            routeStore.isCrossBoundary &&
+              routeStore.externalRoutes.length > 0 &&
+              routeStore.routeView === 'full'
+          "
           class="route-external"
           data-testid="external-route-summary"
         >
@@ -240,17 +287,25 @@ const displayDistanceText = computed(() =>
               </span>
             </button>
           </div>
-          <small class="route-external__note">参考路线由 OSM 提供，实际以高德导航为准</small>
+          <small class="route-external__note">界外路线规划由高德导航提供</small>
         </div>
         <div
-          v-else-if="routeStore.routeView === 'full' && routeStore.externalRouteState === 'loading'"
+          v-else-if="
+            routeStore.isCrossBoundary &&
+              routeStore.routeView === 'full' &&
+              routeStore.externalRouteState === 'loading'
+          "
           class="route-external"
           data-testid="external-route-loading"
         >
           正在加载界外参考路线…
         </div>
         <div
-          v-else-if="routeStore.routeView === 'full' && routeStore.externalRouteState === 'error'"
+          v-else-if="
+            routeStore.isCrossBoundary &&
+              routeStore.routeView === 'full' &&
+              routeStore.externalRouteState === 'error'
+          "
           class="route-external route-external--error"
           data-testid="external-route-error"
         >

@@ -23,9 +23,9 @@ $resolvedDataRoot = [System.IO.Path]::GetFullPath((Resolve-DefaultPath $DataRoot
 $jarPath = Resolve-DefaultPath $Jar (Join-Path $resolvedCodeRoot 'server\target\camera-safe-routing-server-0.1.0-SNAPSHOT.jar')
 $javaExecutable = if ([string]::IsNullOrWhiteSpace($Java)) { 'java' } else { $Java }
 
-$pbf = Join-Path $resolvedDataRoot 'osm\jingjinji-latest.osm.pbf'
+$pbf = Join-Path $resolvedDataRoot 'osm\beijing-latest.osm.pbf'
 $boundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary.geojson'
-$cache = Join-Path $resolvedDataRoot 'graph-cache\jingjinji-compliant-time-v2'
+$cache = Join-Path $resolvedDataRoot 'graph-cache\beijing-compliant-time-v2'
 $cacheSource = Join-Path $cache 'camera-safe-source.sha256'
 $cacheConfig = Join-Path $cache 'camera-safe-routing-config.sha256'
 $cacheProps = Join-Path $cache 'properties.txt'

@@ -131,7 +131,40 @@ public class RoutePlanningServiceTest {
 
         assertThatThrownBy(() -> service.plan(request()))
                 .isInstanceOfSatisfying(BusinessException.class,
-                        exception -> assertThat(exception.code()).isEqualTo(ErrorCode.ROUTE_CONFLICT_DETECTED));
+                exception -> assertThat(exception.code()).isEqualTo(ErrorCode.ROUTE_CONFLICT_DETECTED));
+    }
+
+    @Test
+    void externalOnlyRouteSkipsIndependentCameraValidation() {
+        GraphHopperManager graphManager = readyGraphManager();
+        RoutingSnapshotManager snapshotManager = mock(RoutingSnapshotManager.class);
+        when(snapshotManager.current()).thenReturn(Optional.of(
+                snapshot("camera-v1", "blocked-v1", new Wgs84Coordinate(116.4, 39.905))));
+        RoutePlanner planner = mock(RoutePlanner.class);
+        Wgs84Coordinate start = new Wgs84Coordinate(116.39, 39.90);
+        Wgs84Coordinate end = new Wgs84Coordinate(116.41, 39.91);
+        when(planner.plan(any(), any(), any())).thenReturn(new PlannedRoute(
+                RoutePlanningMode.EXTERNAL_ONLY,
+                "boundary-v1",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                0,
+                0,
+                List.of(start, end),
+                0,
+                0,
+                0));
+
+        RouteResponse response = service(graphManager, snapshotManager, planner).plan(request());
+
+        assertThat(response.planningMode())
+                .isEqualTo(cn.camera.safe.api.model.RoutePlanningMode.EXTERNAL_ONLY);
+        assertThat(response.cameraConflictCount()).isZero();
+        assertThat(response.geometry()).hasSize(2);
     }
 
     private RoutePlanningService service(

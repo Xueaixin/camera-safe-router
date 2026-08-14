@@ -102,7 +102,7 @@ watch(
       routeStore.selectExternalRoute,
     );
     if (isExternalOnly) {
-      props.map.setRoute([]);
+      props.map.setRoute(route.geometry);
     } else {
       props.map.setRoute(routeStore.displayGeometry);
     }
