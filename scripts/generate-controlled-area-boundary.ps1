@@ -89,7 +89,7 @@ Write-Host "REPORT=$reportPath"
 
 # ---- 发布：审阅通过后复制到正式目录 ----
     if ($Publish) {
-        $formalBoundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary.geojson'
+        $formalBoundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary-jingjinji.geojson'
         if (-not $Force) {
             $answer = Read-Host "Publish $outputPath to $formalBoundary? (y/N)"
             if ($answer -notin @('y', 'Y')) { Write-Host 'Publish cancelled.'; exit 0 }

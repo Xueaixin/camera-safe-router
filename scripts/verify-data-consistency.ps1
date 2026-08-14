@@ -24,7 +24,7 @@ $jarPath = Resolve-DefaultPath $Jar (Join-Path $resolvedCodeRoot 'server\target\
 $javaExecutable = if ([string]::IsNullOrWhiteSpace($Java)) { 'java' } else { $Java }
 
 $pbf = Join-Path $resolvedDataRoot 'osm\jingjinji-latest.osm.pbf'
-$boundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary.geojson'
+$boundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary-jingjinji.geojson'
 $cache = Join-Path $resolvedDataRoot 'graph-cache\jingjinji-compliant-time-v2'
 $cacheSource = Join-Path $cache 'camera-safe-source.sha256'
 $cacheConfig = Join-Path $cache 'camera-safe-routing-config.sha256'

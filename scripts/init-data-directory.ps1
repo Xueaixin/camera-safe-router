@@ -36,7 +36,7 @@ foreach ($directory in $directories) {
 [PSCustomObject]@{
     DataRoot = $resolvedDataRoot
     JingjinjiPbf = Join-Path $resolvedDataRoot 'osm\jingjinji-latest.osm.pbf'
-    SixthRingBoundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary.geojson'
+    SixthRingBoundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary-jingjinji.geojson'
     CameraJson = Join-Path $resolvedDataRoot 'cameras\camera.json'
     CameraBackups = Join-Path $resolvedDataRoot 'backups\cameras'
     CameraFailures = Join-Path $resolvedDataRoot 'failed\cameras'
