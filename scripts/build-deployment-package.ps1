@@ -114,8 +114,8 @@ if ($LASTEXITCODE -ne 0) { throw 'osmium export tongzhou failed' }
 if ($LASTEXITCODE -ne 0) { throw 'boundary generation failed' }
 
 # ---- 4. 图缓存冷构图 ----
-$stagingCache = Join-Path $stagingRoot 'graph-cache\jingjinji-compliant-time-v2'
-& $javaExecutable -jar $jarPath graph-build --pbf $stagingPbf --cache-out $stagingCache
+$stagingCache = Join-Path $stagingRoot 'graph-cache\jingjinji-compliant-time-v2-mmap'
+& $javaExecutable '-Drouting.graph.storage=MMAP' -jar $jarPath graph-build --pbf $stagingPbf --cache-out $stagingCache
 if ($LASTEXITCODE -ne 0) { throw 'graph-build failed' }
 
 # ---- 5. 一致性校验（含 jar 配置指纹检查）----

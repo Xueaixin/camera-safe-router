@@ -18,8 +18,8 @@ management:
 app:
   routing:
     pbf-path: ${ROUTING_PBF_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/osm/jingjinji-latest.osm.pbf}
-    graph-cache-path: ${ROUTING_GRAPH_CACHE_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/graph-cache/jingjinji}
-    candidate-graph-cache-path: ${ROUTING_CANDIDATE_GRAPH_CACHE_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/graph-cache/jingjinji-compliant-time-v2}
+    graph-cache-path: ${ROUTING_GRAPH_CACHE_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/graph-cache/jingjinji-mmap}
+    candidate-graph-cache-path: ${ROUTING_CANDIDATE_GRAPH_CACHE_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/graph-cache/jingjinji-compliant-time-v2-mmap}
     profile-mode: ${ROUTING_PROFILE_MODE:COMPLIANT_TIME_V2}
     safety-radius-meters: ${ROUTING_SAFETY_RADIUS_METERS:50}
     calculation-threads: ${ROUTING_CALCULATION_THREADS:4}
@@ -27,7 +27,7 @@ app:
     request-timeout: ${ROUTING_REQUEST_TIMEOUT:10s}
     max-visited-nodes: ${ROUTING_MAX_VISITED_NODES:1000000}
   sixth-ring:
-    boundary-path: ${SIXTH_RING_BOUNDARY_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/boundaries/sixth-ring-boundary.geojson}
+    boundary-path: ${SIXTH_RING_BOUNDARY_PATH:${ROUTING_DATA_ROOT:/camera-safe-routing-data}/boundaries/sixth-ring-boundary-jingjinji.geojson}
     require-approved-boundary: ${SIXTH_RING_REQUIRE_APPROVED_BOUNDARY:false}
     camera-outside-margin-meters: ${CAMERA_CONTROL_OUTSIDE_MARGIN_METERS:50}
     portal-distance-tier-meters: ${SIXTH_RING_PORTAL_DISTANCE_TIER_METERS:1000}

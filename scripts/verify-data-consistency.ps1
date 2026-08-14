@@ -24,8 +24,8 @@ $jarPath = Resolve-DefaultPath $Jar (Join-Path $resolvedCodeRoot 'server\target\
 $javaExecutable = if ([string]::IsNullOrWhiteSpace($Java)) { 'java' } else { $Java }
 
 $pbf = Join-Path $resolvedDataRoot 'osm\jingjinji-latest.osm.pbf'
-$boundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary.geojson'
-$cache = Join-Path $resolvedDataRoot 'graph-cache\jingjinji-compliant-time-v2'
+$boundary = Join-Path $resolvedDataRoot 'boundaries\sixth-ring-boundary-jingjinji.geojson'
+$cache = Join-Path $resolvedDataRoot 'graph-cache\jingjinji-compliant-time-v2-mmap'
 $cacheSource = Join-Path $cache 'camera-safe-source.sha256'
 $cacheConfig = Join-Path $cache 'camera-safe-routing-config.sha256'
 $cacheProps = Join-Path $cache 'properties.txt'
@@ -58,7 +58,7 @@ if ($failures.Count -eq 0) {
 
     if (-not [string]::IsNullOrWhiteSpace($Jar) -and $failures.Count -eq 0) {
         Write-Host 'Running graph-check against the jar to verify cache compatibility...'
-        & $javaExecutable -jar $jarPath graph-check --pbf $pbf --cache $cache
+        & $javaExecutable '-Drouting.graph.storage=MMAP' -jar $jarPath graph-check --pbf $pbf --cache $cache
         if ($LASTEXITCODE -ne 0) {
             $failures += 'graph-check failed: cache configuration fingerprint does not match the jar'
         }
